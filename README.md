@@ -2,9 +2,9 @@
 
 [![W3C RDF1.2 spec compliance](https://github.com/pietercolpaert/rdf-parser.ts/actions/workflows/ci.yml/badge.svg)](https://github.com/pietercolpaert/rdf-parser.ts/actions/workflows/ci.yml)
 
-Fast RDF/JS parsing for Turtle, TriG, N-Triples, N-Quads, RDF 1.2 triple terms, and RDF Message Logs in Node.js and browsers. 
+Fast RDF/JS parsing for Turtle, TriG, N-Triples, N-Quads, RDF 1.2 triple terms, and RDF Message Logs in Node.js and browsers.
 
-Try the interactive browser demo at [https://www.pieter.pm/rdf-parser.ts/](https://www.pieter.pm/rdf-parser.ts/).
+Try `rdf-parser-ts` in the [ldfetch playground](https://www.pieter.pm/ldfetch), which uses this parser library in the browser.
 
 This implementation has been built with a clear scope in mind: RDF1.2 compliance for parsing these 4 formats with RDF Messages support using the RDF/JS data model. We will explicitly never support storing data or reasoning.
 
@@ -70,7 +70,7 @@ For direct browser usage through a CDN, use the ESM bundle:
 
 ```html
 <script type="module">
-	import { Parser, quadToString } from 'https://cdn.jsdelivr.net/npm/rdf-parser.ts/dist/browser/index.mjs';
+	import { Parser, quadToString } from 'https://cdn.jsdelivr.net/npm/rdf-parser-ts/dist/browser/index.mjs';
 
 	const quads = new Parser({ baseIRI: 'https://example.org/' }).parse('<s> <p> <o>.') ?? [];
 	console.log(quadToString(quads[0]));
@@ -80,7 +80,7 @@ For direct browser usage through a CDN, use the ESM bundle:
 Or use the global bundle, which exposes `RDFParserTS`:
 
 ```html
-<script src="https://unpkg.com/rdf-parser.ts/dist/browser/index.global.js"></script>
+<script src="https://unpkg.com/rdf-parser-ts/dist/browser/index.global.js"></script>
 <script>
 	const { Parser, quadToString } = RDFParserTS;
 	const quads = new Parser({ baseIRI: 'https://example.org/' }).parse('<s> <p> <o>.') || [];
@@ -91,7 +91,7 @@ Or use the global bundle, which exposes `RDFParserTS`:
 For streaming in browsers, `StreamParser` works with Web Streams. It can be passed to `pipeThrough()` or used through its `import()` convenience method:
 
 ```ts
-import { StreamParser, quadToString } from 'rdf-parser.ts/browser';
+import { StreamParser, quadToString } from 'rdf-parser-ts/browser';
 
 const parser = new StreamParser({ baseIRI: 'https://example.org/' });
 const rdfStream = new Blob(['<s> <p>', ' <o>.']).stream();
@@ -108,12 +108,10 @@ Current minified browser bundle sizes after `npm run build`, measured with `gzip
 | `dist/browser/index.mjs` | 42,908 bytes (41.9 KiB) | 11,032 bytes (10.8 KiB) |
 | `dist/browser/index.global.js` | 43,393 bytes (42.4 KiB) | 11,223 bytes (11.0 KiB) |
 
-The `example/` folder contains a browser-only playground. It parses RDF with this package, reports quads/messages per second, and uses `rdf-writer-ts` from the browser bundle for optional serialization which is **included** in the bundle size.
-
 ## Parsing strings
 
 ```ts
-import { Parser, quadToString } from 'rdf-parser.ts';
+import { Parser, quadToString } from 'rdf-parser-ts';
 
 const parser = new Parser({ baseIRI: 'http://example.org/' });
 const quads = parser.parse(`
@@ -159,7 +157,7 @@ RDF Messages mode is enabled automatically when the input contains a messages ve
 When RDF Messages mode is active, `Parser#parse()` returns entries that contain both the parsed quad and the message counter. Counters start at `0` and increase at each `MESSAGE` or `@message .` delimiter.
 
 ```ts
-import { Parser, isMessageQuad, quadToString } from 'rdf-parser.ts';
+import { Parser, isMessageQuad, quadToString } from 'rdf-parser-ts';
 
 const output = new Parser().parse(`
 	VERSION "1.2-messages"

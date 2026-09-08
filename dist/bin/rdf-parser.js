@@ -664,11 +664,11 @@ var CoreParser = class {
     if (code === 91) return this.parseBlankNodePropertyList(graph);
     if (code === 40) return this.parseCollection(graph);
     if (code === 43 || code === 45 || code >= 48 && code <= 57) return this.parseNumber();
-    if ((this.strictNTriples || this.strictNQuads) && (this.matchWord("true") || this.matchWord("false"))) {
+    if ((this.strictNTriples || this.strictNQuads) && (this.matchWord("true", true) || this.matchWord("false", true))) {
       this.fail("Boolean literals are not allowed in this format");
     }
-    if (this.matchWord("true")) return this.factory.literal("true", this.factory.namedNode(XSD_BOOLEAN));
-    if (this.matchWord("false")) return this.factory.literal("false", this.factory.namedNode(XSD_BOOLEAN));
+    if (this.matchWord("true", true)) return this.factory.literal("true", this.factory.namedNode(XSD_BOOLEAN));
+    if (this.matchWord("false", true)) return this.factory.literal("false", this.factory.namedNode(XSD_BOOLEAN));
     return this.parsePrefixedName();
   }
   parseDoubleAngleTerm(graph) {
@@ -867,7 +867,7 @@ var CoreParser = class {
   parseNumber() {
     if (this.strictNTriples || this.strictNQuads) this.fail("Numeric literals are not allowed in this format");
     const rest = this.input.slice(this.index);
-    const match = /^[+-]?(?:(?:\d+\.\d*)|(?:\.\d+)|(?:\d+))(?:[eE][+-]?\d+)?/.exec(rest);
+    const match = /^[+-]?(?:(?:\d+\.\d*|\.\d+|\d+)[eE][+-]?\d+|(?:\d*\.\d+)|(?:\d+))/.exec(rest);
     if (!match?.[0]) this.fail("Invalid number");
     const value = match[0];
     this.index += value.length;

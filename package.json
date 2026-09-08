@@ -1,6 +1,6 @@
 {
   "name": "rdf-parser-ts",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Fast RDF-JS parser for Turtle, TriG, N-Triples, N-Quads, and RDF Messages for NodeJS and browsers.",
   "keywords": [
     "rdf",

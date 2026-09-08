@@ -54,6 +54,28 @@ describe('Parser', () => {
     ]);
   });
 
+  it('parses boolean literals followed by Turtle punctuation', () => {
+    expect(ids('@prefix ex: <http://example.com/>. ex:s ex:enabled true.')).toEqual([
+      '<http://example.com/s> <http://example.com/enabled> "true"^^<http://www.w3.org/2001/XMLSchema#boolean> .',
+    ]);
+    expect(ids('@prefix ex: <http://example.com/>. ex:s ex:enabled true; ex:disabled false.')).toEqual([
+      '<http://example.com/s> <http://example.com/enabled> "true"^^<http://www.w3.org/2001/XMLSchema#boolean> .',
+      '<http://example.com/s> <http://example.com/disabled> "false"^^<http://www.w3.org/2001/XMLSchema#boolean> .',
+    ]);
+  });
+
+  it('parses integer literals followed by a Turtle dot terminator', () => {
+    expect(ids('@prefix ex: <http://example.com/>. ex:s ex:count 60.')).toEqual([
+      '<http://example.com/s> <http://example.com/count> "60"^^<http://www.w3.org/2001/XMLSchema#integer> .',
+    ]);
+  });
+
+  it('parses double literals with a dot and no fractional digits', () => {
+    expect(ids('@prefix ex: <http://example.com/>. ex:s ex:value 123.E+1.')).toEqual([
+      '<http://example.com/s> <http://example.com/value> "123.E+1"^^<http://www.w3.org/2001/XMLSchema#double> .',
+    ]);
+  });
+
   it('parses Turtle blank node property list statements', () => {
     const output = ids(`@prefix dash: <http://datashapes.org/dash#> .
 @prefix ex: <http://datashapes.org/sh/tests/core/node/class-002.test#> .
