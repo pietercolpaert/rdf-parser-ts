@@ -1,6 +1,6 @@
 # RDF Parser for TypeScript
 
-[![W3C RDF1.2 spec compliance](https://github.com/pietercolpaert/rdf-parser.ts/actions/workflows/ci.yml/badge.svg)](https://github.com/pietercolpaert/rdf-parser.ts/actions/workflows/ci.yml)
+[![W3C RDF1.2 spec compliance](https://github.com/pietercolpaert/rdf-parser-ts/actions/workflows/ci.yml/badge.svg)](https://github.com/pietercolpaert/rdf-parser-ts/actions/workflows/ci.yml)
 
 Fast RDF/JS parsing for Turtle, TriG, N-Triples, N-Quads, RDF 1.2 triple terms, and RDF Message Logs in Node.js and browsers.
 
@@ -22,7 +22,7 @@ npm install rdf-parser-ts
 ## Package layout
 
 - `src/index.ts` contains the RDF-JS data model, parser, stream parser, incremental parser, and parser helpers.
-- `src/bin/rdf-parser.ts` provides the `rdf-parser-ts` CLI.
+- `src/bin/rdf-parser-ts` provides the `rdf-parser-ts` CLI.
 - `test/` contains Vitest unit tests.
 - `spec/` contains the `rdf-test-suite` adapter and EARL metadata, matching the N3.js spec-test setup.
 - `perf/` contains synthetic performance benchmarks against N3.js and Graphy.
@@ -60,7 +60,7 @@ The package exports CommonJS, ESM, and browser builds:
 With a browser-aware bundler, import the browser entry explicitly:
 
 ```ts
-import { Parser, StreamParser, quadToString } from 'rdf-parser.ts/browser';
+import { Parser, StreamParser, quadToString } from 'rdf-parser-ts/browser';
 
 const quads = new Parser({ baseIRI: 'https://example.org/' }).parse('<s> <p> <o>.') ?? [];
 console.log(quadToString(quads[0]!));
@@ -185,7 +185,7 @@ new Parser().parse(input, (error, quad, prefixes, messageCounter) => {
 Use `toMessages()` to group parser output into `Message` instances. `Message` extends `Array` and contains the quads belonging to one RDF Message. Empty messages are preserved when the input contains delimiters before the first quad or between two delimiters.
 
 ```ts
-import { Parser, toMessages } from 'rdf-parser.ts';
+import { Parser, toMessages } from 'rdf-parser-ts';
 
 const output = new Parser({ rdfMessages: true }).parse(`
 	MESSAGE
@@ -216,7 +216,7 @@ Blank node labels are scoped per message in RDF Messages mode, so the same blank
 
 ```ts
 import { createReadStream } from 'node:fs';
-import { StreamParser } from 'rdf-parser.ts';
+import { StreamParser } from 'rdf-parser-ts';
 
 const parser = new StreamParser({
 	baseIRI: 'http://example.org/',
@@ -250,7 +250,7 @@ parser.import(createReadStream('data.ttl')).on('data', quad => console.log(quad)
 The default `DataFactory` creates RDF-JS-compatible terms:
 
 ```ts
-import { DataFactory } from 'rdf-parser.ts';
+import { DataFactory } from 'rdf-parser-ts';
 
 const s = DataFactory.namedNode('http://example.org/s');
 const p = DataFactory.namedNode('http://example.org/p');
@@ -281,7 +281,7 @@ Public exports include:
 Pass a custom factory to produce terms owned by another RDF-JS implementation, such as Comunica’s data factory.
 
 ```ts
-import { StreamParser } from 'rdf-parser.ts';
+import { StreamParser } from 'rdf-parser-ts';
 
 const parser = new StreamParser({
 	factory: dataFactory,
@@ -292,7 +292,7 @@ const parser = new StreamParser({
 });
 ```
 
-This option shape matches the usage pattern in Comunica's `ActorRdfParseN3`: a consumer can replace `import { StreamParser } from 'n3'` with `import { StreamParser } from 'rdf-parser.ts'` for evaluation.
+This option shape matches the usage pattern in Comunica's `ActorRdfParseN3`: a consumer can replace `import { StreamParser } from 'n3'` with `import { StreamParser } from 'rdf-parser-ts'` for evaluation.
 
 ## CLI
 
@@ -352,7 +352,7 @@ node perf/bench.js --sizes 10000,50000 --no-n3
 node perf/bench.js --sizes 10000,50000 --no-triple-terms
 ```
 
-Graphy 4.x's N-Quads reader does not parse RDF 1.2 triple terms, so the default triple-term benchmark prints a skipped Graphy row. Use `--no-triple-terms` or `npm run perf:graphy` for direct `rdf-parser.ts`, N3.js, Graphy, and Graphy relaxed-mode numbers on the same generated line-format input.
+Graphy 4.x's N-Quads reader does not parse RDF 1.2 triple terms, so the default triple-term benchmark prints a skipped Graphy row. Use `--no-triple-terms` or `npm run perf:graphy` for direct `rdf-parser-ts`, N3.js, Graphy, and Graphy relaxed-mode numbers on the same generated line-format input.
 
 ### Quick benchmark snapshot
 
@@ -362,24 +362,24 @@ Default RDF 1.2 triple-term input, from `npm run perf:quick`:
 
 | Statements | Parser | Time | Throughput | Input | RSS delta |
 | ---: | --- | ---: | ---: | ---: | ---: |
-| 1,000 | rdf-parser.ts | 0.002s | 439,540 q/s | 0.1 MiB | 2.1 MiB |
-| 1,000 | rdf-parser.ts/relax | 0.001s | 782,497 q/s | 0.1 MiB | 0.4 MiB |
+| 1,000 | rdf-parser-ts | 0.002s | 439,540 q/s | 0.1 MiB | 2.1 MiB |
+| 1,000 | rdf-parser-ts/relax | 0.001s | 782,497 q/s | 0.1 MiB | 0.4 MiB |
 | 1,000 | N3.js | 0.008s | 127,099 q/s | 0.1 MiB | 1.9 MiB |
-| 10,000 | rdf-parser.ts | 0.023s | 435,162 q/s | 1.1 MiB | 5.6 MiB |
-| 10,000 | rdf-parser.ts/relax | 0.012s | 839,620 q/s | 1.1 MiB | 5.0 MiB |
+| 10,000 | rdf-parser-ts | 0.023s | 435,162 q/s | 1.1 MiB | 5.6 MiB |
+| 10,000 | rdf-parser-ts/relax | 0.012s | 839,620 q/s | 1.1 MiB | 5.0 MiB |
 | 10,000 | N3.js | 0.047s | 214,567 q/s | 1.1 MiB | 6.6 MiB |
 
 Line-format input without RDF 1.2 triple terms, from `node perf/bench.js --sizes 1000,10000 --no-triple-terms`:
 
 | Statements | Parser | Time | Throughput | Input | RSS delta |
 | ---: | --- | ---: | ---: | ---: | ---: |
-| 1,000 | rdf-parser.ts | 0.001s | 773,045 q/s | 0.1 MiB | 0.5 MiB |
-| 1,000 | rdf-parser.ts/relax | 0.002s | 525,116 q/s | 0.1 MiB | 0.3 MiB |
+| 1,000 | rdf-parser-ts | 0.001s | 773,045 q/s | 0.1 MiB | 0.5 MiB |
+| 1,000 | rdf-parser-ts/relax | 0.002s | 525,116 q/s | 0.1 MiB | 0.3 MiB |
 | 1,000 | N3.js | 0.006s | 166,228 q/s | 0.1 MiB | 1.9 MiB |
 | 1,000 | Graphy | 0.003s | 317,648 q/s | 0.1 MiB | 1.9 MiB |
 | 1,000 | Graphy/relax | 0.002s | 594,226 q/s | 0.1 MiB | -1.0 MiB |
-| 10,000 | rdf-parser.ts | 0.010s | 959,069 q/s | 0.9 MiB | 1.4 MiB |
-| 10,000 | rdf-parser.ts/relax | 0.010s | 982,829 q/s | 0.9 MiB | 4.7 MiB |
+| 10,000 | rdf-parser-ts | 0.010s | 959,069 q/s | 0.9 MiB | 1.4 MiB |
+| 10,000 | rdf-parser-ts/relax | 0.010s | 982,829 q/s | 0.9 MiB | 4.7 MiB |
 | 10,000 | N3.js | 0.026s | 386,462 q/s | 0.9 MiB | 3.3 MiB |
 | 10,000 | Graphy | 0.011s | 881,601 q/s | 0.9 MiB | 7.5 MiB |
 | 10,000 | Graphy/relax | 0.005s | 1,857,713 q/s | 0.9 MiB | 2.4 MiB |
