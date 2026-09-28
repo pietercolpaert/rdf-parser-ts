@@ -161,7 +161,8 @@ _:b9751
     expect(ids('@prefix ex: <http://example.com/>. { ex:s ex:p ex:o }')).toEqual([
       '<http://example.com/s> <http://example.com/p> <http://example.com/o> .',
     ]);
-    expect(() => new Parser({ format: 'turtle' }).parse('{ <s> <p> <o> }')).toThrow(/Expected \./u);
+    expect(() => new Parser({ format: 'turtle' }).parse('{ <s> <p> <o> }'))
+      .toThrow(/Graph blocks are not allowed in this format/u);
   });
 
   it('supports an RDF-JS factory override', () => {
@@ -181,9 +182,11 @@ _:b9751
   });
 
   it('parses RDF1.2 triple terms and Turtle reified triples', () => {
-    expect(ids('<<( <s> <p> <o> )>> <p2> <<( <s2> <p2> <o2> )>> .')).toEqual([
-      '<<(<http://example.org/s> <http://example.org/p> <http://example.org/o>)>> <http://example.org/p2> <<(<http://example.org/s2> <http://example.org/p2> <http://example.org/o2>)>> .',
+    expect(ids('<s1> <p2> <<( <s2> <p2> <o2> )>> .')).toEqual([
+      '<http://example.org/s1> <http://example.org/p2> <<(<http://example.org/s2> <http://example.org/p2> <http://example.org/o2>)>> .',
     ]);
+    // RDF 1.2 does not allow triple terms in subject position
+    expect(() => ids('<<( <s> <p> <o> )>> <p2> <o2> .')).toThrow(/Invalid subject term Quad/u);
     expect(ids('<< <s> <p> <o> >> <p2> <o2> .')).toEqual([
       '_:b0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies> <<(<http://example.org/s> <http://example.org/p> <http://example.org/o>)>> .',
       '_:b0 <http://example.org/p2> <http://example.org/o2> .',

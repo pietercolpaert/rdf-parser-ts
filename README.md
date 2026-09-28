@@ -145,14 +145,14 @@ parser.parse('<s> <p> <o>.', (error, quad, prefixes) => {
 
 ### Parser options
 
-- `baseIRI` / `baseIRIPath`: resolve relative IRIs, following RFC 3986 (via [relative-to-absolute-iri](https://github.com/rubensworks/relative-to-absolute-iri.js)).
+- `baseIRI` / `baseIRIPath`: resolve relative IRIs with the RFC 3986 algorithm. Absolute IRIs are kept as written.
 - `format`: hint the input format, such as `text/turtle`, `application/n-triples`, `application/n-quads`, or `application/trig`.
 - `factory`: custom [RDF/JS `DataFactory`](https://rdf.js.org/data-model-spec/#datafactory-interface).
 - `comments`: emit comment events in streaming mode.
 - `relax`: enable the faster relaxed line-format path for generated input.
 - `rdfMessages` / `messages`: force RDF Messages mode.
 - `version`: set the RDF version label; messages versions such as `1.2-messages` enable RDF Messages mode.
-- `parseUnsupportedVersions`: accept unsupported version labels for compatibility testing.
+- `parseUnsupportedVersions`: accept version labels other than `1.1`, `1.2`, `1.2-basic`, and `*-messages`, which are rejected by default.
 
 ## RDF Messages
 
@@ -355,7 +355,17 @@ npm run spec-1-2-trig
 
 Generate EARL reports with `npm run spec-1-1-earl` or `npm run spec-1-2-earl`, and use `npm run spec-clean` to remove the manifest cache.
 
-The N-Triples and N-Quads RDF 1.1/RDF 1.2 scripts run without skips. The Turtle and TriG scripts run the same official manifests with explicit `--skip` patterns for currently unsupported edge cases such as full PN_CHARS Unicode coverage, escaped prefixed names, RDF 1.2 annotation/reifier syntax, and Turtle/TriG version directives. This keeps `npm run spec` reproducible and green while making remaining conformance work visible in `package.json`.
+The N-Triples and N-Quads suites, and the RDF 1.2 Turtle and TriG suites, run without skips. The RDF 1.1 Turtle and TriG scripts use `--skip` patterns for edge cases that are still unsupported: full PN_CHARS Unicode coverage, escaped prefixed names, and a few invalid-escape and invalid-keyword tests. This keeps `npm run spec` reproducible and green while making remaining conformance work visible in `package.json`.
+
+## N3.js parser tests
+
+`test/n3-compat.test.ts` replays about 700 Turtle, TriG, N-Triples, N-Quads, and IRI-resolution cases from the [N3.js](https://github.com/rdfjs/N3.js) parser tests (N3-only syntax is left out). Results are compared up to blank node renaming. For invalid input, only the fact that parsing fails is checked, because error messages differ between implementations. The few cases where this parser deliberately behaves differently are listed with a reason in the test file.
+
+The cases live in `test/fixtures/n3-parser-cases.json`. To regenerate them from an N3.js checkout that has been built:
+
+```sh
+npm run test:n3-extract -- ../N3.js
+```
 
 ## Performance benchmarks
 

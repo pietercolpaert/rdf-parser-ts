@@ -2,7 +2,7 @@ const config = require('@rubensworks/eslint-config');
 
 module.exports = config([
   {
-    ignores: [ 'dist/**', 'coverage/**', 'perf/**', 'scripts/**', 'spec/**', '.rdf-test-suite-cache/**', '**/*.md' ],
+    ignores: [ 'dist/**', 'coverage/**', 'perf/**', 'scripts/**', 'spec/**', '.rdf-test-suite-cache/**', '**/*.md', 'test/fixtures/**' ],
   },
   {
     files: [ '**/*.ts', '**/*.mts' ],

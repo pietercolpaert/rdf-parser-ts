@@ -42,7 +42,6 @@ __export(index_exports, {
 });
 module.exports = __toCommonJS(index_exports);
 var import_readable_stream = require("readable-stream");
-var import_relative_to_absolute_iri = require("relative-to-absolute-iri");
 var XSD = "http://www.w3.org/2001/XMLSchema#";
 var RDF_NS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 var RDF_TYPE = `${RDF_NS}type`;
@@ -516,6 +515,11 @@ var CoreParser = class {
   /** Whether the format is N-Triples or N-Quads, which enables the strict line-based grammar. */
   strictLineFormat;
   allowDotlessGraphTerminator;
+  /** Whether graph blocks are allowed (TriG, and the format-agnostic default). */
+  allowGraphs;
+  /** Whether `subject predicate object graph .` statements are allowed (N-Quads, and the default). */
+  allowQuadStatements;
+  parseUnsupportedVersions;
   relax;
   defaultGraphTerm;
   namedNodeCache;
@@ -546,10 +550,13 @@ var CoreParser = class {
     this.line = state?.line ?? 1;
     this.blankNodeLabels = state?.blankNodeLabels ?? /* @__PURE__ */ new Map();
     this.namedNodeCache = state?.namedNodeCache ?? /* @__PURE__ */ new Map();
-    const format = (options.format ?? "").toLowerCase();
+    const format = typeof options.format === "string" ? options.format.toLowerCase() : "";
     this.strictNTriples = format.includes("n-triples");
     this.strictLineFormat = this.strictNTriples || format.includes("n-quads");
     this.allowDotlessGraphTerminator = format === "" || format.includes("trig");
+    this.allowGraphs = !this.strictNTriples && !format.includes("turtle");
+    this.allowQuadStatements = format === "" || format.includes("n-quads");
+    this.parseUnsupportedVersions = options.parseUnsupportedVersions === true;
   }
   parse(final = true) {
     while (true) {
@@ -776,17 +783,17 @@ var CoreParser = class {
     if (this.relax) {
       return end;
     }
-    let hasScheme = false;
+    let hasScheme2 = false;
     for (let i = index + 1; i < end; i++) {
       const code = this.input.charCodeAt(i);
       if (code === 58 && i > index + 1) {
-        hasScheme = true;
+        hasScheme2 = true;
       }
       if (code <= 32 || code === 34 || code === 60 || code === 92 || code === 94 || code === 96 || code === 123 || code === 124 || code === 125) {
         return -1;
       }
     }
-    return hasScheme ? end : -1;
+    return hasScheme2 ? end : -1;
   }
   skipHws(index) {
     while (index < this.length) {
@@ -812,17 +819,18 @@ var CoreParser = class {
   parseStatement(defaultGraph2, allowGraphCloseTerminator = false, insideGraphBlock = false) {
     this.skipWsAndComments();
     if (this.parseDirective(defaultGraph2)) {
+      if (insideGraphBlock) {
+        this.fail("Directives are not allowed inside graph blocks");
+      }
       return false;
     }
     if (this.peekCharCode() === 123) {
-      if (insideGraphBlock) {
-        this.fail("Graph blocks are not allowed inside graph blocks");
-      }
+      this.assertGraphBlockAllowed(insideGraphBlock);
       this.index++;
       this.parseGraphStatements(defaultGraph2);
       return false;
     }
-    if (this.matchWord("GRAPH")) {
+    if (this.allowGraphs && this.matchWord("GRAPH")) {
       if (insideGraphBlock) {
         this.fail("Graph blocks are not allowed inside graph blocks");
       }
@@ -838,15 +846,13 @@ var CoreParser = class {
     const termEnd = this.index;
     this.skipWsAndComments();
     if (this.peekCharCode() === 123) {
-      if (insideGraphBlock) {
-        this.fail("Graph blocks are not allowed inside graph blocks");
-      }
+      this.assertGraphBlockAllowed(insideGraphBlock);
       this.assertGraphLabel(subjectOrGraph, termStart, termEnd);
       this.index++;
       this.parseGraphStatements(subjectOrGraph);
       return false;
     }
-    if (this.isBlankNodePropertyListSubject(termStart, termEnd)) {
+    if (this.isBlankNodePropertyListSubject(termStart, termEnd) || this.isReifiedTripleSubject(termStart, subjectOrGraph)) {
       if (this.peekCharCode() === 46) {
         this.index++;
         return false;
@@ -856,6 +862,14 @@ var CoreParser = class {
       }
     }
     return this.parsePredicateObjectList(subjectOrGraph, defaultGraph2, 46, allowGraphCloseTerminator);
+  }
+  assertGraphBlockAllowed(insideGraphBlock) {
+    if (insideGraphBlock) {
+      this.fail("Graph blocks are not allowed inside graph blocks");
+    }
+    if (!this.allowGraphs) {
+      this.fail("Graph blocks are not allowed in this format");
+    }
   }
   parseGraphStatements(graph) {
     let lastStatementClosedByGraph = false;
@@ -886,8 +900,8 @@ var CoreParser = class {
         const object = this.parseObject(graph);
         this.skipWsAndComments();
         if (terminatorCode === 46 && !allowGraphCloseTerminator && graph.termType === "DefaultGraph" && this.canStartTerm() && !this.nextIsStatementBoundary()) {
-          if (this.strictNTriples) {
-            this.fail("Graph terms are not allowed in N-Triples");
+          if (!this.allowQuadStatements) {
+            this.fail(`Graph terms are not allowed in ${this.strictNTriples ? "N-Triples" : "this format"}`);
           }
           const explicitGraph = this.parseNamedOrBlankTerm(graph);
           this.addQuad(subject, predicate, object, explicitGraph);
@@ -896,6 +910,7 @@ var CoreParser = class {
           return false;
         }
         this.addQuad(subject, predicate, object, graph);
+        this.parseAnnotations(subject, predicate, object, graph);
         if (this.peekCharCode() !== 44) {
           break;
         }
@@ -911,8 +926,10 @@ var CoreParser = class {
       if (this.strictLineFormat) {
         this.fail("Predicate lists are not allowed in this format");
       }
-      this.index++;
-      this.skipWsAndComments();
+      do {
+        this.index++;
+        this.skipWsAndComments();
+      } while (this.peekCharCode() === 59);
       if (this.peekCharCode() === terminatorCode || allowGraphCloseTerminator && this.peekCharCode() === 125) {
         break;
       }
@@ -926,6 +943,45 @@ var CoreParser = class {
       this.fail(`Expected ${String.fromCharCode(terminatorCode)} after property list`);
     }
     return false;
+  }
+  /**
+   * Parses the RDF 1.2 annotations following an object: reifiers (`~ reifier`) and annotation blocks
+   * (`{| predicateObjectList |}`). An annotation block describes the reifier directly before it, or a fresh
+   * blank node reifier when there is none.
+   */
+  parseAnnotations(subject, predicate, object, graph) {
+    let tripleTerm;
+    let reifier;
+    while (true) {
+      const code = this.peekCharCode();
+      const annotationBlock = code === 123 && this.input.charCodeAt(this.index + 1) === 124;
+      if (code !== 126 && !annotationBlock) {
+        return;
+      }
+      if (this.strictLineFormat) {
+        this.fail("Annotations are not allowed in this format");
+      }
+      tripleTerm ??= this.factory.quad(subject, predicate, object, this.factory.defaultGraph());
+      if (annotationBlock) {
+        this.index += 2;
+        this.skipWsAndComments();
+        if (!reifier) {
+          reifier = this.createFreshBlankNode();
+          this.addQuad(reifier, this.factory.namedNode(RDF_REIFIES), tripleTerm, graph);
+        }
+        this.parsePredicateObjectList(reifier, graph, 124);
+        if (this.input.charCodeAt(this.index + 1) !== 125) {
+          this.fail("Expected |} after annotation block");
+        }
+        this.index += 2;
+        reifier = void 0;
+      } else {
+        this.index++;
+        reifier = this.parseOptionalReifier(graph);
+        this.addQuad(reifier, this.factory.namedNode(RDF_REIFIES), tripleTerm, graph);
+      }
+      this.skipWsAndComments();
+    }
   }
   addQuad(subject, predicate, object, graph) {
     const quad2 = this.factory.quad(subject, predicate, object, graph);
@@ -942,25 +998,25 @@ var CoreParser = class {
       if (this.strictLineFormat) {
         this.fail("Directives are not allowed in this format");
       }
-      this.index++;
-      if (this.matchWord("version")) {
+      let end = start + 1;
+      while (isAsciiLetter(this.input.charCodeAt(end))) {
+        end++;
+      }
+      const keyword = this.input.slice(start + 1, end);
+      if (keyword !== "version" && keyword !== "prefix" && keyword !== "base" && keyword !== "message") {
+        return false;
+      }
+      this.index = end;
+      if (keyword === "version") {
         this.parseVersionDirective(true);
-        return true;
-      }
-      if (this.matchWord("prefix")) {
+      } else if (keyword === "prefix") {
         this.parsePrefixDirective(true);
-        return true;
-      }
-      if (this.matchWord("base")) {
+      } else if (keyword === "base") {
         this.parseBaseDirective(true);
-        return true;
-      }
-      if (this.matchWord("message", true)) {
+      } else {
         this.parseMessageDirective(true, currentGraph);
-        return true;
       }
-      this.index = start;
-      return false;
+      return true;
     }
     if (this.matchWord("VERSION")) {
       this.parseVersionDirective(false);
@@ -988,7 +1044,17 @@ var CoreParser = class {
   }
   parseVersionDirective(needsDot) {
     this.skipWsAndComments();
+    const quote = this.peekCharCode();
+    if (quote !== 34 && quote !== 39) {
+      this.fail("Expected a version string");
+    }
+    if (this.input.charCodeAt(this.index + 1) === quote && this.input.charCodeAt(this.index + 2) === quote) {
+      this.fail("Version labels must not use long strings");
+    }
     this.version = this.readQuotedString();
+    if (!this.parseUnsupportedVersions && !SUPPORTED_VERSIONS.has(this.version) && !isMessagesVersion(this.version)) {
+      this.fail(`Unsupported version "${this.version}"`);
+    }
     if (isMessagesVersion(this.version)) {
       this.messagesEnabled = true;
     }
@@ -1012,7 +1078,7 @@ var CoreParser = class {
   }
   parsePrefixDirective(needsDot) {
     this.skipWsAndComments();
-    const prefix = this.readUntilColon();
+    const prefix = this.readName(NAME_PREFIX);
     this.expectChar(58, "Expected : after prefix label");
     this.skipWsAndComments();
     const iri = this.parseIri();
@@ -1033,7 +1099,7 @@ var CoreParser = class {
   }
   parseSubject(graph) {
     const term = this.parseTerm(graph);
-    if (term.termType === "Literal" || this.strictLineFormat && term.termType === "Quad") {
+    if (term.termType === "Literal" || term.termType === "Quad") {
       this.fail(`Invalid subject term ${term.termType}`);
     }
     return term;
@@ -1042,7 +1108,7 @@ var CoreParser = class {
     return this.parseTerm(graph);
   }
   parsePredicate(graph) {
-    if (this.matchWord("a")) {
+    if (this.matchWord("a", false, true)) {
       return this.factory.namedNode(RDF_TYPE);
     }
     const term = this.parseTerm(graph);
@@ -1064,10 +1130,8 @@ var CoreParser = class {
     this.assertGraphLabel(term, start);
     return term;
   }
+  /** Rejects graph labels that are syntactically not an IRI or blank node label, such as `[ <p> <o> ]` or `( )`. */
   assertGraphLabel(term, start, end = this.index) {
-    if (term.termType !== "NamedNode" && term.termType !== "BlankNode") {
-      this.fail(`Invalid graph term ${term.termType}`);
-    }
     const code = this.input.charCodeAt(start);
     if (code === 91 && !this.isAnonymousBlankNodeLabel(start, end) || code === 40 || code === 60 && this.input.charCodeAt(start + 1) === 60) {
       this.fail(`Invalid graph term ${term.termType}`);
@@ -1076,6 +1140,9 @@ var CoreParser = class {
   /** Whether the term in `[start, end)` is `[]`, possibly with whitespace and comments between the brackets. */
   isAnonymousBlankNodeLabel(start, end) {
     return this.input.charCodeAt(start) === 91 && this.input.charCodeAt(end - 1) === 93 && scanTrailingTriviaEnd(this.input, start + 1) === end - 1;
+  }
+  isReifiedTripleSubject(start, term) {
+    return term.termType !== "Quad" && this.input.charCodeAt(start) === 60 && this.input.charCodeAt(start + 1) === 60;
   }
   isBlankNodePropertyListSubject(start, end) {
     return this.input.charCodeAt(start) === 91 && !this.isAnonymousBlankNodeLabel(start, end);
@@ -1104,16 +1171,17 @@ var CoreParser = class {
     if (code === 40) {
       return this.parseCollection(graph);
     }
-    if (code === 43 || code === 45 || code >= 48 && code <= 57) {
+    const next = this.input.charCodeAt(this.index + 1);
+    if (code === 43 || code === 45 || code >= 48 && code <= 57 || code === 46 && next >= 48 && next <= 57) {
       return this.parseNumber();
     }
-    if (this.strictLineFormat && (this.matchWord("true", true) || this.matchWord("false", true))) {
+    if (this.strictLineFormat && (this.matchWord("true", true, true) || this.matchWord("false", true, true))) {
       this.fail("Boolean literals are not allowed in this format");
     }
-    if (this.matchWord("true", true)) {
+    if (this.matchWord("true", true, true)) {
       return this.factory.literal("true", this.factory.namedNode(XSD_BOOLEAN));
     }
-    if (this.matchWord("false", true)) {
+    if (this.matchWord("false", true, true)) {
       return this.factory.literal("false", this.factory.namedNode(XSD_BOOLEAN));
     }
     return this.parsePrefixedName();
@@ -1159,6 +1227,7 @@ var CoreParser = class {
     return reifier;
   }
   parseReifiedTripleSubject(graph) {
+    this.skipWsAndComments();
     const start = this.index;
     const term = this.parseTerm(graph);
     this.assertReifiedTripleTerm(term, start, "subject");
@@ -1168,6 +1237,7 @@ var CoreParser = class {
     return term;
   }
   parseReifiedTripleObject(graph) {
+    this.skipWsAndComments();
     const start = this.index;
     const term = this.parseTerm(graph);
     this.assertReifiedTripleTerm(term, start, "object");
@@ -1175,8 +1245,13 @@ var CoreParser = class {
   }
   parseReifier(graph) {
     this.index++;
+    return this.parseOptionalReifier(graph);
+  }
+  /** Parses the IRI or blank node after `~`, or creates a fresh blank node when it is omitted. */
+  parseOptionalReifier(graph) {
     this.skipWsAndComments();
-    if (this.input.charCodeAt(this.index) === 62 && this.input.charCodeAt(this.index + 1) === 62) {
+    const code = this.peekCharCode();
+    if (!(code === 91 || isPrefixStart(code) || code === 60 && this.input.charCodeAt(this.index + 1) !== 60)) {
       return this.createFreshBlankNode();
     }
     const start = this.index;
@@ -1200,8 +1275,13 @@ var CoreParser = class {
       const code = this.peekCharCode();
       if (code === 62) {
         this.index++;
-        if (this.strictLineFormat && !/^[A-Za-z][\d+.A-Za-z-]*:/u.test(value)) {
-          this.fail("Relative IRIs are not allowed in this format");
+        if (!hasScheme(value)) {
+          if (this.strictLineFormat) {
+            this.fail("Relative IRIs are not allowed in this format");
+          }
+          if (hasColonInFirstSegment(value)) {
+            this.fail("Invalid relative IRI: colon in first path segment");
+          }
         }
         return this.factory.namedNode(resolveIri(value, this.baseIRI));
       }
@@ -1242,7 +1322,7 @@ var CoreParser = class {
       if (datatype.termType !== "NamedNode") {
         this.fail("Expected datatype IRI after ^^");
       }
-      if (this.strictLineFormat && (datatype.value === RDF_LANG_STRING || datatype.value === RDF_DIR_LANG_STRING)) {
+      if (datatype.value === RDF_LANG_STRING || datatype.value === RDF_DIR_LANG_STRING) {
         this.fail("Language string datatypes require an explicit language tag");
       }
       return this.factory.literal(value, datatype);
@@ -1262,20 +1342,11 @@ var CoreParser = class {
   }
   parseBlankNode() {
     this.index += 2;
-    const start = this.index;
-    while (this.index < this.length && isNameChar(this.peekCharCode())) {
-      if (this.peekCharCode() === 46) {
-        const next = this.input.charCodeAt(this.index + 1);
-        if (isDotTerminator(next)) {
-          break;
-        }
-      }
-      this.index++;
-    }
-    if (this.index === start) {
+    const label = this.readName(NAME_BLANK_NODE_LABEL);
+    if (!label) {
       this.fail("Expected blank node label");
     }
-    return this.blankNodeFromLabel(this.input.slice(start, this.index));
+    return this.blankNodeFromLabel(label);
   }
   parseBlankNodePropertyList(graph) {
     this.expectChar(91, "Expected [");
@@ -1367,27 +1438,14 @@ var CoreParser = class {
     return this.factory.literal(value, this.factory.namedNode(datatype));
   }
   parsePrefixedName() {
-    const prefix = this.readUntilColon();
+    const prefix = this.readName(NAME_PREFIX);
     this.expectChar(58, "Expected prefixed name");
-    const localStart = this.index;
-    while (this.index < this.length) {
-      const code = this.peekCharCode();
-      if (!isLocalNameChar(code)) {
-        break;
-      }
-      if (code === 46) {
-        const next = this.input.charCodeAt(this.index + 1);
-        if (isDotTerminator(next)) {
-          break;
-        }
-      }
-      this.index++;
-    }
+    const local = this.readName(NAME_LOCAL);
     const namespace = this.prefixes[prefix];
     if (!namespace) {
       this.fail(`Unknown prefix "${prefix}"`);
     }
-    return this.factory.namedNode(namespace.value + this.input.slice(localStart, this.index));
+    return this.factory.namedNode(namespace.value + local);
   }
   readQuotedString() {
     const quote = this.peekCharCode();
@@ -1457,7 +1515,11 @@ var CoreParser = class {
         this.fail("Invalid Unicode escape");
       }
       this.index += size;
-      return String.fromCodePoint(Number.parseInt(hex, 16));
+      const codePoint = Number.parseInt(hex, 16);
+      if (codePoint >= 55296 && codePoint <= 57343) {
+        this.fail("Unicode escapes must not encode surrogates");
+      }
+      return String.fromCodePoint(codePoint);
     }
     this.fail("Invalid escape sequence");
   }
@@ -1489,19 +1551,43 @@ var CoreParser = class {
     }
     return tag.toLowerCase();
   }
-  readUntilColon() {
-    const start = this.index;
-    while (this.index < this.length) {
-      const code = this.peekCharCode();
-      if (code === 58) {
+  /**
+   * Reads a PN_PREFIX, PN_LOCAL or BLANK_NODE_LABEL (without `_:`) and returns its value, with PN_LOCAL_ESC
+   * escapes resolved. Names cannot end with `.`, so a trailing dot is left for the statement terminator.
+   */
+  readName(kind) {
+    let i = this.index;
+    let value = "";
+    let end = i;
+    let endValue = "";
+    while (i < this.length) {
+      const code = this.input.charCodeAt(i);
+      if (kind === NAME_LOCAL && (code === 92 || code === 37)) {
+        const escape = code === 92 ? this.input.slice(i, i + 2) : this.input.slice(i, i + 3);
+        if (code === 92 ? !LOCAL_NAME_ESCAPES.has(escape.charAt(1)) : !/^%[\dA-Fa-f]{2}$/u.test(escape)) {
+          this.index = i;
+          this.fail(`Invalid ${code === 92 ? "escape" : "percent-encoding"} in local name`);
+        }
+        value += code === 92 ? escape.charAt(1) : escape;
+        i += escape.length;
+        end = i;
+        endValue = value;
+        continue;
+      }
+      const codePoint = code >= 55296 && code <= 56319 ? this.input.codePointAt(i) : code;
+      if (!(i === this.index ? isNameStart(codePoint, kind) : isNamePart(codePoint, kind))) {
         break;
       }
-      if (!isPrefixNameChar(code)) {
-        break;
+      const width = codePoint > 65535 ? 2 : 1;
+      value += this.input.slice(i, i + width);
+      i += width;
+      if (code !== 46) {
+        end = i;
+        endValue = value;
       }
-      this.index++;
     }
-    return this.input.slice(start, this.index);
+    this.index = end;
+    return endValue;
   }
   skipWsAndComments() {
     while (this.index < this.length) {
@@ -1526,11 +1612,12 @@ var CoreParser = class {
       return;
     }
   }
-  matchWord(word, allowDotBoundary = false) {
+  matchWord(word, allowDotBoundary = false, caseSensitive = false) {
     if (this.input.length - this.index < word.length) {
       return false;
     }
-    if (this.input.slice(this.index, this.index + word.length).toLowerCase() !== word.toLowerCase()) {
+    const candidate = this.input.slice(this.index, this.index + word.length);
+    if (caseSensitive ? candidate !== word : candidate.toLowerCase() !== word.toLowerCase()) {
       return false;
     }
     const previous = this.index > 0 ? this.input.charCodeAt(this.index - 1) : -1;
@@ -1571,15 +1658,98 @@ var CoreParser = class {
     throw error;
   }
 };
+var SUPPORTED_VERSIONS = /* @__PURE__ */ new Set(["1.1", "1.2", "1.2-basic"]);
+function hasScheme(iri) {
+  return /^[A-Za-z][\d+.A-Za-z-]*:/u.test(iri);
+}
+function hasColonInFirstSegment(iri) {
+  const colon = iri.indexOf(":");
+  if (colon < 0) {
+    return false;
+  }
+  const end = iri.search(/[#/?]/u);
+  return end < 0 || colon < end;
+}
+var lastBase;
+function parseBase(iri) {
+  if (lastBase?.iri === iri) {
+    return lastBase;
+  }
+  const match = /^([A-Za-z][\d+.A-Za-z-]*:)(\/\/[^#/?]*)?([^#?]*)(\?[^#]*)?/u.exec(iri);
+  if (!match) {
+    return void 0;
+  }
+  lastBase = {
+    iri,
+    prefix: match[1] + (match[2] ?? ""),
+    hasAuthority: match[2] !== void 0,
+    path: match[3],
+    query: match[4] ?? ""
+  };
+  return lastBase;
+}
 function resolveIri(value, baseIRI) {
-  if (!baseIRI) {
+  if (!baseIRI || hasScheme(value)) {
     return value;
   }
-  try {
-    return (0, import_relative_to_absolute_iri.resolve)(value, baseIRI);
-  } catch {
+  const base = parseBase(baseIRI);
+  if (!base) {
     return value;
   }
+  const first = value.charCodeAt(0);
+  if (first === 47 && value.charCodeAt(1) === 47) {
+    const authorityEnd = value.slice(2).search(/[#/?]/u);
+    if (authorityEnd < 0) {
+      return base.prefix.slice(0, base.prefix.indexOf(":") + 1) + value;
+    }
+    const pathStart = authorityEnd + 2;
+    return base.prefix.slice(0, base.prefix.indexOf(":") + 1) + value.slice(0, pathStart) + removeDotSegmentsOfReference(value.slice(pathStart));
+  }
+  if (Number.isNaN(first) || first === 35) {
+    return base.prefix + base.path + base.query + value;
+  }
+  if (first === 63) {
+    return base.prefix + base.path + value;
+  }
+  if (first === 47) {
+    return base.prefix + removeDotSegmentsOfReference(value);
+  }
+  const directory = base.hasAuthority && base.path === "" ? "/" : base.path.slice(0, base.path.lastIndexOf("/") + 1);
+  return base.prefix + removeDotSegmentsOfReference(directory + value);
+}
+function removeDotSegmentsOfReference(reference) {
+  const pathEnd = reference.search(/[#?]/u);
+  if (pathEnd < 0) {
+    return removeDotSegments(reference);
+  }
+  return removeDotSegments(reference.slice(0, pathEnd)) + reference.slice(pathEnd);
+}
+function removeDotSegments(path) {
+  if (!path.includes(".")) {
+    return path;
+  }
+  let input = path;
+  let output = "";
+  while (input.length > 0) {
+    if (input.startsWith("../")) {
+      input = input.slice(3);
+    } else if (input.startsWith("./") || input.startsWith("/./")) {
+      input = input.slice(2);
+    } else if (input === "/.") {
+      input = "/";
+    } else if (input.startsWith("/../") || input === "/..") {
+      input = input === "/.." ? "/" : input.slice(3);
+      output = output.slice(0, Math.max(0, output.lastIndexOf("/")));
+    } else if (input === "." || input === "..") {
+      input = "";
+    } else {
+      const segmentEnd = input.indexOf("/", 1);
+      const segment = segmentEnd < 0 ? input : input.slice(0, segmentEnd);
+      output += segment;
+      input = input.slice(segment.length);
+    }
+  }
+  return output;
 }
 function isMessagesVersion(version) {
   return typeof version === "string" && version.toLowerCase().endsWith("-messages");
@@ -1596,17 +1766,33 @@ function isInvalidIriChar(code) {
 function isNameChar(code) {
   return code >= 65 && code <= 90 || code >= 97 && code <= 122 || code >= 48 && code <= 57 || code === 95 || code === 45 || code === 46;
 }
+function isAsciiLetter(code) {
+  return code >= 65 && code <= 90 || code >= 97 && code <= 122;
+}
 function isWordBoundaryBlocker(code) {
-  return isNameChar(code) || code === 58;
+  return isNameChar(code) || code === 58 || code >= 128;
 }
 function isPrefixStart(code) {
-  return code === 58 || code === 95 || code >= 65 && code <= 90 || code >= 97 && code <= 122;
+  return code === 58 || code === 95 || code >= 65 && code <= 90 || code >= 97 && code <= 122 || code >= 128;
 }
-function isPrefixNameChar(code) {
-  return code === 95 || code === 45 || code >= 65 && code <= 90 || code >= 97 && code <= 122 || code >= 48 && code <= 57;
+var NAME_PREFIX = 0;
+var NAME_LOCAL = 1;
+var NAME_BLANK_NODE_LABEL = 2;
+var LOCAL_NAME_ESCAPES = new Set("_~.-!$&'()*+,;=/?#@%");
+function isPnCharsBase(cp) {
+  return cp >= 65 && cp <= 90 || cp >= 97 && cp <= 122 || cp >= 192 && cp <= 214 || cp >= 216 && cp <= 246 || cp >= 248 && cp <= 767 || cp >= 880 && cp <= 893 || cp >= 895 && cp <= 8191 || cp === 8204 || cp === 8205 || cp >= 8304 && cp <= 8591 || cp >= 11264 && cp <= 12271 || cp >= 12289 && cp <= 55295 || cp >= 63744 && cp <= 64975 || cp >= 65008 && cp <= 65533 || cp >= 65536 && cp <= 983039;
 }
-function isLocalNameChar(code) {
-  return isPrefixNameChar(code) || code === 126 || code === 46 || code === 37 || code === 47 || code === 35;
+function isPnChars(cp) {
+  return cp === 95 || cp === 45 || cp >= 48 && cp <= 57 || isPnCharsBase(cp) || cp === 183 || cp >= 768 && cp <= 879 || cp === 8255 || cp === 8256;
+}
+function isNameStart(cp, kind) {
+  if (kind === NAME_PREFIX) {
+    return isPnCharsBase(cp);
+  }
+  return cp === 95 || cp >= 48 && cp <= 57 || isPnCharsBase(cp) || kind === NAME_LOCAL && cp === 58;
+}
+function isNamePart(cp, kind) {
+  return cp === 46 || isPnChars(cp) || kind === NAME_LOCAL && cp === 58;
 }
 function isLanguageTagValid(tag) {
   const directionalSeparator = tag.indexOf("--");
