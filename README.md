@@ -355,7 +355,7 @@ npm run spec-1-2-trig
 
 Generate EARL reports with `npm run spec-1-1-earl` or `npm run spec-1-2-earl`, and use `npm run spec-clean` to remove the manifest cache.
 
-The N-Triples and N-Quads suites, and the RDF 1.2 Turtle and TriG suites, run without skips. The RDF 1.1 Turtle and TriG scripts use `--skip` patterns for edge cases that are still unsupported: full PN_CHARS Unicode coverage, escaped prefixed names, and a few invalid-escape and invalid-keyword tests. This keeps `npm run spec` reproducible and green while making remaining conformance work visible in `package.json`.
+All suites run without skipping any test: the RDF 1.1 and RDF 1.2 syntax suites for N-Triples, N-Quads, Turtle, and TriG, plus the RDF 1.2 Turtle and TriG evaluation suites, which also check the parsed output.
 
 ## N3.js parser tests
 
