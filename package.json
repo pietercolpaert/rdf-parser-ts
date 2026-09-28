@@ -1,7 +1,18 @@
 {
   "name": "rdf-parser-ts",
-  "version": "0.3.2",
+  "type": "commonjs",
+  "version": "0.4.0",
   "description": "Fast RDF-JS parser for Turtle, TriG, N-Triples, N-Quads, and RDF Messages for NodeJS and browsers.",
+  "author": "Pieter Colpaert",
+  "license": "MIT",
+  "homepage": "https://github.com/pietercolpaert/rdf-parser-ts#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pietercolpaert/rdf-parser-ts.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pietercolpaert/rdf-parser-ts/issues"
+  },
   "keywords": [
     "rdf",
     "rdf-js",
@@ -11,25 +22,7 @@
     "n-quads",
     "parser"
   ],
-  "homepage": "https://github.com/pietercolpaert/rdf-parser.ts#readme",
-  "bugs": {
-    "url": "https://github.com/pietercolpaert/rdf-parser.ts/issues"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/pietercolpaert/rdf-parser.ts.git"
-  },
-  "license": "MIT",
-  "author": "Pieter Colpaert",
-  "type": "commonjs",
   "sideEffects": false,
-  "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
-  "browser": "./dist/browser/index.mjs",
-  "bin": {
-    "rdf-parser-ts": "./dist/bin/rdf-parser.js"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -43,24 +36,34 @@
     },
     "./package.json": "./package.json"
   },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "browser": "./dist/browser/index.mjs",
+  "bin": {
+    "rdf-parser-ts": "./dist/bin/rdf-parser.js"
+  },
   "directories": {
     "test": "test"
   },
   "files": [
+    "README.md",
     "dist",
-    "src",
     "spec",
-    "README.md"
+    "src"
   ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "clean": "rm -rf dist coverage .rdf-test-suite-cache",
     "build": "npm run build:node && npm run build:browser",
     "build:node": "tsup src/index.ts src/bin/rdf-parser.ts --format cjs,esm --dts --target node24 --platform node --clean --splitting false --out-dir dist",
     "build:browser": "node scripts/build-browser.cjs",
-    "test": "vitest run --coverage.enabled false",
+    "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit",
-    "check": "npm run lint && npm run build && npm test",
+    "lint": "eslint . --cache",
+    "check": "npm run typecheck && npm run lint && npm run build && npm test",
     "ci": "npm run check && npm run perf:regression",
     "hooks:install": "node scripts/install-hooks.cjs",
     "prepare": "npm run build && npm run hooks:install",
@@ -69,8 +72,8 @@
     "spec-1-1-earl": "npm run spec-1-1-earl-turtle && npm run spec-1-1-earl-ntriples && npm run spec-1-1-earl-nquads && npm run spec-1-1-earl-trig",
     "spec-1-1-ntriples": "rdf-test-suite spec/parser.cjs https://w3c.github.io/rdf-tests/rdf/rdf11/rdf-n-triples/manifest.ttl -i '{ \"format\": \"n-triples\" }' -c .rdf-test-suite-cache/",
     "spec-1-1-nquads": "rdf-test-suite spec/parser.cjs https://w3c.github.io/rdf-tests/rdf/rdf11/rdf-n-quads/manifest.ttl -i '{ \"format\": \"n-quads\" }' -c .rdf-test-suite-cache/",
-    "spec-1-1-turtle": "rdf-test-suite spec/parser.cjs https://w3c.github.io/rdf-tests/rdf/rdf11/rdf-turtle/manifest.ttl -i '{ \"format\": \"turtle\" }' -c .rdf-test-suite-cache/ --skip \"(prefix_with|reserved_escaped|localname|localName|labeled_blank_node|blankNodePropertyList|sole_blankNodePropertyList|nested_blankNodePropertyLists|predicateObjectList_with_blankNodePropertyList|repeated_semis|comment_following|number_sign_following|turtle-syntax-prefix-06|turtle-syntax-pname-esc|turtle-syntax-bnode-0[89]|turtle-syntax-bnode-10|turtle-syntax-number-0[58]|turtle-syntax-struct-0[45]|turtle-syntax-bad-uri-0[14]|turtle-syntax-bad-base-02|turtle-syntax-bad-struct-03|turtle-syntax-bad-kw-01|turtle-syntax-bad-n3-extras-06|turtle-syntax-bad-numeric-escape|turtle-syntax-bad-pname-0[12]|turtle-eval-bad-0[1-4]|turtle-syntax-bad-ln|turtle-syntax-bad-number-dot-in-anon|turtle-syntax-ln-colons|turtle-syntax-ns-dots|IRI-resolution-0[127])\"",
-    "spec-1-1-trig": "rdf-test-suite spec/parser.cjs https://w3c.github.io/rdf-tests/rdf/rdf11/rdf-trig/manifest.ttl -i '{ \"format\": \"trig\" }' -c .rdf-test-suite-cache/ --skip \"(prefix_with|reserved_escaped|localname|localName|labeled_blank_node|blankNodePropertyList|sole_blankNodePropertyList|nested_blankNodePropertyLists|repeated_semis|comment_following|number_sign_following|trig-syntax-bad-base-0[245]|trig-syntax-bad-prefix-0[67]|trig-syntax-struct-0[4567]|trig-syntax-minimal-whitespace-01|trig-syntax-prefix-06|trig-syntax-pname-esc|trig-syntax-bnode-0[89]|trig-syntax-bnode-10|trig-syntax-number-0[58]|trig-syntax-bad-uri-0[14]|trig-syntax-bad-struct-03|trig-syntax-bad-kw-01|trig-syntax-bad-n3-extras-06|trig-syntax-bad-numeric-escape|trig-syntax-bad-pname-0[12]|trig-eval-bad-0[1-4]|trig-syntax-bad-ln|trig-syntax-bad-number-dot-in-anon|trig-syntax-ln-colons|trig-syntax-ns-dots|trig-kw-graph-0[1456789]|trig-turtle-05|IRI-resolution-0[127]|bareword_decimal)\"",
+    "spec-1-1-turtle": "rdf-test-suite spec/parser.cjs https://w3c.github.io/rdf-tests/rdf/rdf11/rdf-turtle/manifest.ttl -i '{ \"format\": \"turtle\" }' -c .rdf-test-suite-cache/ --skip \"(prefix_with|reserved_escaped|localname|localName|labeled_blank_node|blankNodePropertyList|sole_blankNodePropertyList|nested_blankNodePropertyLists|predicateObjectList_with_blankNodePropertyList|repeated_semis|comment_following|number_sign_following|turtle-syntax-prefix-06|turtle-syntax-pname-esc|turtle-syntax-bnode-0[89]|turtle-syntax-bnode-10|turtle-syntax-number-0[58]|turtle-syntax-struct-0[45]|turtle-syntax-bad-uri-0[14]|turtle-syntax-bad-base-02|turtle-syntax-bad-struct-03|turtle-syntax-bad-kw-01|turtle-syntax-bad-n3-extras-06|turtle-syntax-bad-numeric-escape|turtle-syntax-bad-pname-0[12]|turtle-eval-bad-0[1-4]|turtle-syntax-bad-ln|turtle-syntax-bad-number-dot-in-anon|turtle-syntax-ln-colons|turtle-syntax-ns-dots)\"",
+    "spec-1-1-trig": "rdf-test-suite spec/parser.cjs https://w3c.github.io/rdf-tests/rdf/rdf11/rdf-trig/manifest.ttl -i '{ \"format\": \"trig\" }' -c .rdf-test-suite-cache/ --skip \"(prefix_with|reserved_escaped|localname|localName|labeled_blank_node|blankNodePropertyList|sole_blankNodePropertyList|nested_blankNodePropertyLists|repeated_semis|comment_following|number_sign_following|trig-syntax-bad-base-0[245]|trig-syntax-bad-prefix-0[67]|trig-syntax-struct-0[4567]|trig-syntax-minimal-whitespace-01|trig-syntax-prefix-06|trig-syntax-pname-esc|trig-syntax-bnode-0[89]|trig-syntax-bnode-10|trig-syntax-number-0[58]|trig-syntax-bad-uri-0[14]|trig-syntax-bad-struct-03|trig-syntax-bad-kw-01|trig-syntax-bad-n3-extras-06|trig-syntax-bad-numeric-escape|trig-syntax-bad-pname-0[12]|trig-eval-bad-0[1-4]|trig-syntax-bad-ln|trig-syntax-bad-number-dot-in-anon|trig-syntax-ln-colons|trig-syntax-ns-dots|trig-kw-graph-0[1456789]|trig-turtle-05|bareword_decimal)\"",
     "spec-1-1-earl-ntriples": "rdf-test-suite spec/parser.cjs https://w3c.github.io/rdf-tests/rdf/rdf11/rdf-n-triples/manifest.ttl -i '{ \"format\": \"n-triples\" }' -c .rdf-test-suite-cache/ -o earl -p spec/earl-meta.json > spec/earl-ntriples.ttl",
     "spec-1-1-earl-nquads": "rdf-test-suite spec/parser.cjs https://w3c.github.io/rdf-tests/rdf/rdf11/rdf-n-quads/manifest.ttl -i '{ \"format\": \"n-quads\" }' -c .rdf-test-suite-cache/ -o earl -p spec/earl-meta.json > spec/earl-nquads.ttl",
     "spec-1-1-earl-turtle": "rdf-test-suite spec/parser.cjs https://w3c.github.io/rdf-tests/rdf/rdf11/rdf-turtle/manifest.ttl -i '{ \"format\": \"turtle\" }' -c .rdf-test-suite-cache/ -o earl -p spec/earl-meta.json > spec/earl-turtle.ttl",
@@ -89,17 +92,23 @@
     "perf": "npm run build && node perf/bench.js",
     "perf:quick": "npm run build && node perf/bench.js --sizes 1000,10000",
     "perf:regression": "npm run build && node --expose-gc perf/regression.js",
-    "perf:graphy": "npm run build && node perf/bench.js --no-triple-terms"
+    "perf:graphy": "npm run build && node perf/bench.js --no-triple-terms",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@rdfjs/types": "^2.0.1",
-    "rdf-writer-ts": "^0.1.1"
+    "readable-stream": "^4.7.0",
+    "relative-to-absolute-iri": "^1.0.8"
   },
   "devDependencies": {
     "@graphy/content.nq.read": "^4.3.7",
+    "@rubensworks/eslint-config": "^3.1.0",
     "@types/node": "^24.0.0",
+    "@types/readable-stream": "^4.0.24",
+    "@vitest/coverage-v8": "^4.1.11",
     "arrayify-stream": "^3.0.0",
     "esbuild": "^0.27.7",
+    "eslint": "^8.57.1",
     "eyeling": "^1.28.3",
     "n3": "^2.1.1",
     "rdf-test-suite": "^2.1.4",
@@ -107,8 +116,5 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^4.1.8"
-  },
-  "engines": {
-    "node": ">=22.0.0"
   }
 }

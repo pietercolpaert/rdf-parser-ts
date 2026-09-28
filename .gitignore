@@ -3,3 +3,4 @@ coverage/
 .rdf-test-suite-cache/
 *.log
 spec/earl-*.ttl
+.eslintcache

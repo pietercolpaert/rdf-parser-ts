@@ -37,39 +37,35 @@ __export(index_exports, {
   literal: () => literal,
   namedNode: () => namedNode,
   quad: () => quad,
-  quadToString: () => quadToString,
-  termFromId: () => termFromId,
-  termToId: () => termToId,
-  termToString: () => termToString,
   toMessages: () => toMessages,
   variable: () => variable
 });
 module.exports = __toCommonJS(index_exports);
-var import_node_stream = require("stream");
-var import_node_string_decoder = require("string_decoder");
+var import_readable_stream = require("readable-stream");
+var import_relative_to_absolute_iri = require("relative-to-absolute-iri");
 var XSD = "http://www.w3.org/2001/XMLSchema#";
-var RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
-var RDF_TYPE = `${RDF}type`;
-var RDF_REIFIES = `${RDF}reifies`;
-var RDF_FIRST = `${RDF}first`;
-var RDF_REST = `${RDF}rest`;
-var RDF_NIL = `${RDF}nil`;
-var RDF_LANG_STRING = `${RDF}langString`;
-var RDF_DIR_LANG_STRING = `${RDF}dirLangString`;
+var RDF_NS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+var RDF_TYPE = `${RDF_NS}type`;
+var RDF_REIFIES = `${RDF_NS}reifies`;
+var RDF_FIRST = `${RDF_NS}first`;
+var RDF_REST = `${RDF_NS}rest`;
+var RDF_NIL = `${RDF_NS}nil`;
+var RDF_LANG_STRING = `${RDF_NS}langString`;
+var RDF_DIR_LANG_STRING = `${RDF_NS}dirLangString`;
 var XSD_STRING = `${XSD}string`;
 var XSD_INTEGER = `${XSD}integer`;
 var XSD_DECIMAL = `${XSD}decimal`;
 var XSD_DOUBLE = `${XSD}double`;
 var XSD_BOOLEAN = `${XSD}boolean`;
 function sameTerm(a, b) {
-  if (!b || typeof b !== "object" || !("termType" in b) || !("value" in b)) return false;
-  const other = b;
-  if (a.termType !== other.termType || a.value !== other.value) return false;
-  if (a.termType === "Literal" && other.termType === "Literal") {
-    return a.language === other.language && a.direction === other.direction && a.datatype.equals(other.datatype);
+  if (!b || a.termType !== b.termType || a.value !== b.value) {
+    return false;
   }
-  if (a.termType === "Quad" && other.termType === "Quad") {
-    return a.subject.equals(other.subject) && a.predicate.equals(other.predicate) && a.object.equals(other.object) && a.graph.equals(other.graph);
+  if (a.termType === "Literal" && b.termType === "Literal") {
+    return a.language === b.language && a.direction === b.direction && a.datatype.equals(b.datatype);
+  }
+  if (a.termType === "Quad" && b.termType === "Quad") {
+    return a.subject.equals(b.subject) && a.predicate.equals(b.predicate) && a.object.equals(b.object) && a.graph.equals(b.graph);
   }
   return true;
 }
@@ -115,7 +111,9 @@ var Literal = class {
     this.value = value;
     this.language = language;
     this.datatype = datatype;
-    if (direction) this.direction = direction;
+    if (direction) {
+      this.direction = direction;
+    }
   }
   value;
   language;
@@ -148,7 +146,9 @@ var Message = class _Message extends Array {
     super();
     this.messageCounter = messageCounter;
     Object.setPrototypeOf(this, _Message.prototype);
-    for (const quad2 of quads) this.push(quad2);
+    for (const quad2 of quads) {
+      this.push(quad2);
+    }
   }
   messageCounter;
   static get [Symbol.species]() {
@@ -157,59 +157,81 @@ var Message = class _Message extends Array {
 };
 var defaultGraphSingleton = new DefaultGraph();
 var globalBlankNodeCounter = 0;
-var DataFactory = {
-  namedNode: (value) => new NamedNode(value),
-  blankNode: (value) => new BlankNode(value ?? `b${globalBlankNodeCounter++}`),
-  literal: (value, languageOrDatatype, datatype) => {
-    if (typeof languageOrDatatype === "string") {
-      const directionalSeparator = languageOrDatatype.indexOf("--");
-      if (directionalSeparator >= 0) {
-        const language2 = languageOrDatatype.slice(0, directionalSeparator).toLowerCase();
-        const direction = languageOrDatatype.slice(directionalSeparator + 2).toLowerCase();
-        return new Literal(value, language2, datatype ?? new NamedNode(RDF_LANG_STRING), direction);
-      }
-      const language = languageOrDatatype.toLowerCase();
-      return new Literal(value, language, datatype ?? new NamedNode(language ? RDF_LANG_STRING : XSD_STRING));
-    }
-    if (isDirectionalLanguage(languageOrDatatype)) {
-      return new Literal(
-        value,
-        languageOrDatatype.language.toLowerCase(),
-        datatype ?? new NamedNode(RDF_LANG_STRING),
-        languageOrDatatype.direction
-      );
-    }
-    return new Literal(value, "", languageOrDatatype ?? datatype ?? new NamedNode(XSD_STRING));
-  },
-  variable: (value) => new Variable(value),
-  defaultGraph: () => defaultGraphSingleton,
-  quad: (subject, predicate, object, graph = defaultGraphSingleton) => new Quad(subject, predicate, object, graph)
-};
 function isDirectionalLanguage(value) {
   return Boolean(value && typeof value === "object" && "language" in value && !("termType" in value));
 }
-var Parser = class {
-  static _resetBlankNodePrefix() {
-    globalBlankNodeCounter = 0;
+function fromTerm(original) {
+  switch (original.termType) {
+    case "NamedNode":
+      return new NamedNode(original.value);
+    case "BlankNode":
+      return new BlankNode(original.value);
+    case "Variable":
+      return new Variable(original.value);
+    case "DefaultGraph":
+      return defaultGraphSingleton;
+    case "Literal":
+      return new Literal(
+        original.value,
+        original.language,
+        fromTerm(original.datatype),
+        original.direction ?? void 0
+      );
+    case "Quad":
+      return new Quad(
+        fromTerm(original.subject),
+        fromTerm(original.predicate),
+        fromTerm(original.object),
+        fromTerm(original.graph)
+      );
   }
-  _factory;
+}
+var DataFactory = {
+  namedNode: (value) => new NamedNode(value),
+  blankNode: (value) => new BlankNode(value ?? `b${globalBlankNodeCounter++}`),
+  literal: (value, languageOrDatatype) => {
+    if (typeof languageOrDatatype === "string") {
+      const language = languageOrDatatype.toLowerCase();
+      return new Literal(value, language, new NamedNode(language ? RDF_LANG_STRING : XSD_STRING));
+    }
+    if (isDirectionalLanguage(languageOrDatatype)) {
+      const direction = languageOrDatatype.direction ?? void 0;
+      return new Literal(
+        value,
+        languageOrDatatype.language.toLowerCase(),
+        new NamedNode(direction ? RDF_DIR_LANG_STRING : RDF_LANG_STRING),
+        direction
+      );
+    }
+    return new Literal(value, "", languageOrDatatype ?? new NamedNode(XSD_STRING));
+  },
+  variable: (value) => new Variable(value),
+  defaultGraph: () => defaultGraphSingleton,
+  quad: (subject, predicate, object, graph = defaultGraphSingleton) => new Quad(subject, predicate, object, graph),
+  fromTerm,
+  fromQuad: (original) => fromTerm(original)
+};
+var Parser = class {
   options;
   constructor(options = {}) {
     this.options = options;
-    this._factory = options.factory ?? DataFactory;
   }
+  /**
+   * Parses `input` and returns all quads, or `{ quad, messageCounter }` entries in RDF Messages mode.
+   * When a callback is passed, it is called once per quad, then once with `quad === null`, and nothing is returned.
+   */
   parse(input, callback) {
     try {
-      const core = new CoreParser(input, this.options, {
-        prefix: (prefix, iri) => void 0,
-        comment: (comment) => void 0
-      });
-      const result = core.parse();
+      const result = new CoreParser(input, this.options, {}).parse();
       if (callback) {
         if (result.messagesEnabled) {
-          for (const entry of result.messageQuads) callback(null, entry.quad, result.prefixes, entry.messageCounter);
+          for (const entry of result.messageQuads) {
+            callback(null, entry.quad, result.prefixes, entry.messageCounter);
+          }
         } else {
-          for (const quad2 of result.quads) callback(null, quad2, result.prefixes);
+          for (const quad2 of result.quads) {
+            callback(null, quad2, result.prefixes);
+          }
         }
         callback(null, null, result.prefixes);
         return void 0;
@@ -223,12 +245,9 @@ var Parser = class {
       throw error;
     }
   }
+  /** Parses `input` in RDF Messages mode and groups the quads per message. */
   parseMessages(input) {
-    const core = new CoreParser(input, { ...this.options, rdfMessages: true }, {
-      prefix: (prefix, iri) => void 0,
-      comment: (comment) => void 0
-    });
-    const result = core.parse();
+    const result = new CoreParser(input, { ...this.options, rdfMessages: true }, {}).parse();
     return toMessages(result.messageQuads);
   }
 };
@@ -255,27 +274,37 @@ function findCompleteParseEnd(input) {
     const code = input.charCodeAt(i);
     if (code === 35) {
       const end = scanCommentEnd(input, i);
-      if (end < 0) break;
+      if (end < 0) {
+        break;
+      }
       i = end;
       continue;
     }
     if (code === 34 || code === 39) {
       const end = scanQuotedStringEnd(input, i);
-      if (end < 0) break;
+      if (end < 0) {
+        break;
+      }
       i = end;
       continue;
     }
     if (code === 60 && input.charCodeAt(i + 1) !== 60) {
       const end = scanIriEnd(input, i);
-      if (end < 0) break;
+      if (end < 0) {
+        break;
+      }
       i = end;
       continue;
     }
-    if (code === 123) graphDepth++;
-    else if (code === 125 && graphDepth > 0) graphDepth--;
-    else if (code === 91 || code === 40) bracketDepth++;
-    else if ((code === 93 || code === 41) && bracketDepth > 0) bracketDepth--;
-    else if (code === 46 && graphDepth === 0 && bracketDepth === 0 && isStatementDotBoundary(input, i)) {
+    if (code === 123) {
+      graphDepth++;
+    } else if (code === 125 && graphDepth > 0) {
+      graphDepth--;
+    } else if (code === 91 || code === 40) {
+      bracketDepth++;
+    } else if ((code === 93 || code === 41) && bracketDepth > 0) {
+      bracketDepth--;
+    } else if (code === 46 && graphDepth === 0 && bracketDepth === 0 && isStatementDotBoundary(input, i)) {
       const end = scanTrailingTriviaEnd(input, i + 1);
       lastEnd = end;
       i = end;
@@ -288,8 +317,12 @@ function findCompleteParseEnd(input) {
 function scanCommentEnd(input, index) {
   for (let i = index + 1; i < input.length; i++) {
     const code = input.charCodeAt(i);
-    if (code === 10) return i + 1;
-    if (code === 13) return input.charCodeAt(i + 1) === 10 ? i + 2 : i + 1;
+    if (code === 10) {
+      return i + 1;
+    }
+    if (code === 13) {
+      return input.charCodeAt(i + 1) === 10 ? i + 2 : i + 1;
+    }
   }
   return -1;
 }
@@ -300,13 +333,19 @@ function scanQuotedStringEnd(input, index) {
   while (i < input.length) {
     const code = input.charCodeAt(i);
     if (code === 92) {
-      if (i + 1 >= input.length) return -1;
+      if (i + 1 >= input.length) {
+        return -1;
+      }
       i += 2;
       continue;
     }
     if (code === quote) {
-      if (!triple) return i + 1;
-      if (input.charCodeAt(i + 1) === quote && input.charCodeAt(i + 2) === quote) return i + 3;
+      if (!triple) {
+        return i + 1;
+      }
+      if (input.charCodeAt(i + 1) === quote && input.charCodeAt(i + 2) === quote) {
+        return i + 3;
+      }
     }
     i++;
   }
@@ -316,11 +355,15 @@ function scanIriEnd(input, index) {
   for (let i = index + 1; i < input.length; i++) {
     const code = input.charCodeAt(i);
     if (code === 92) {
-      if (i + 1 >= input.length) return -1;
+      if (i + 1 >= input.length) {
+        return -1;
+      }
       i++;
       continue;
     }
-    if (code === 62) return i + 1;
+    if (code === 62) {
+      return i + 1;
+    }
   }
   return -1;
 }
@@ -338,7 +381,9 @@ function scanTrailingTriviaEnd(input, index) {
     }
     if (code === 35) {
       const end = scanCommentEnd(input, i);
-      if (end < 0) return i;
+      if (end < 0) {
+        return i;
+      }
       i = end;
       continue;
     }
@@ -357,16 +402,20 @@ var IncrementalParser = class {
   parserState;
   pending = "";
   atStart = true;
+  /** Adds a chunk of input and returns the output of all statements that are complete so far. */
   write(input) {
     this.appendInput(input);
     return this.parsePending(false);
   }
+  /** Adds an optional last chunk, parses all remaining input and returns its output. */
   end(input = "") {
     this.appendInput(input);
     return this.parsePending(true);
   }
   appendInput(input) {
-    if (!input) return;
+    if (!input) {
+      return;
+    }
     if (this.atStart) {
       this.atStart = false;
       this.pending += input.charCodeAt(0) === 65279 ? input.slice(1) : input;
@@ -376,80 +425,81 @@ var IncrementalParser = class {
   }
   parsePending(final) {
     const end = final ? this.pending.length : findCompleteParseEnd(this.pending);
-    if (end <= 0 && !final) return [];
-    const input = final ? this.pending : this.pending.slice(0, end);
-    if (!input && !final) return [];
-    const parser = new CoreParser(input, this.options, this.callbacks, this.parserState);
+    if (end <= 0 && !final) {
+      return [];
+    }
+    const parser = new CoreParser(this.pending.slice(0, end), this.options, this.callbacks, this.parserState);
     const result = parser.parse(final);
     this.parserState = parser.exportState();
-    this.pending = final ? "" : this.pending.slice(end);
-    return result.messagesEnabled ? [...result.messageQuads] : [...result.quads];
+    this.pending = this.pending.slice(end);
+    return result.messagesEnabled ? result.messageQuads : result.quads;
   }
 };
-var StreamParser = class extends import_node_stream.Transform {
-  decoder = new import_node_string_decoder.StringDecoder("utf8");
-  options;
-  parserState;
-  pending = "";
-  atStart = true;
+var StreamParser = class extends import_readable_stream.Transform {
+  decoder = new TextDecoder();
+  parser;
   constructor(options = {}) {
-    const { baseIRI, baseIRIPath, format, factory, comments, relax, rdfMessages, messages, parseUnsupportedVersions, version, ...streamOptions } = options;
+    const {
+      baseIRI,
+      baseIRIPath,
+      format,
+      factory,
+      comments,
+      relax,
+      rdfMessages,
+      messages,
+      parseUnsupportedVersions,
+      version,
+      ...streamOptions
+    } = options;
     super({ ...streamOptions, readableObjectMode: true });
-    this.options = { baseIRI, baseIRIPath, format, factory, comments, relax, rdfMessages, messages, parseUnsupportedVersions, version };
-    this.parserState = createInitialCoreParserState(this.options);
+    this.parser = new IncrementalParser(
+      {
+        baseIRI,
+        baseIRIPath,
+        format,
+        factory,
+        comments,
+        relax,
+        rdfMessages,
+        messages,
+        parseUnsupportedVersions,
+        version
+      },
+      {
+        prefix: (prefix, iri) => this.emit("prefix", prefix, iri),
+        comment: (comment) => this.emit("comment", comment)
+      }
+    );
   }
+  /** Pipes `stream` into this parser, forwarding its errors, and returns this parser. */
   import(stream) {
     stream.on("error", (error) => this.emit("error", error));
     stream.pipe(this);
     return this;
   }
-  _transform(chunk, encoding, callback) {
-    try {
-      this.appendInput(this.decoder.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding)));
-      this.parsePending(false);
-      callback();
-    } catch (error) {
-      callback(error instanceof Error ? error : new Error(String(error)));
-    }
+  _transform(chunk, _encoding, callback) {
+    const input = typeof chunk === "string" ? chunk : this.decoder.decode(chunk, { stream: true });
+    this.run(() => this.parser.write(input), callback);
   }
   _flush(callback) {
+    this.run(() => this.parser.end(this.decoder.decode()), callback);
+  }
+  run(parse, callback) {
+    let items;
     try {
-      this.appendInput(this.decoder.end());
-      this.parsePending(true);
-      callback();
+      items = parse();
     } catch (error) {
       callback(error instanceof Error ? error : new Error(String(error)));
-    }
-  }
-  appendInput(input) {
-    if (!input) return;
-    if (this.atStart) {
-      this.atStart = false;
-      this.pending += input.charCodeAt(0) === 65279 ? input.slice(1) : input;
       return;
     }
-    this.pending += input;
-  }
-  parsePending(final) {
-    const end = final ? this.pending.length : findCompleteParseEnd(this.pending);
-    if (end <= 0 && !final) return;
-    const input = final ? this.pending : this.pending.slice(0, end);
-    if (!input && !final) return;
-    const parser = new CoreParser(input, this.options, {
-      prefix: (prefix, iri) => this.emit("prefix", prefix, iri),
-      comment: (comment) => this.emit("comment", comment)
-    }, this.parserState);
-    const result = parser.parse(final);
-    this.parserState = parser.exportState();
-    if (result.messagesEnabled) {
-      for (const entry of result.messageQuads) {
-        this.emit("messageCounter", entry.messageCounter, entry.quad);
-        this.push(entry);
+    for (const item of items) {
+      if (isMessageQuad(item)) {
+        this.emit("messageCounter", item.messageCounter, item.quad);
       }
-    } else {
-      for (const quad2 of result.quads) this.push(quad2);
+      this.push(item);
     }
-    this.pending = final ? "" : this.pending.slice(end);
+    callback();
   }
 };
 var CoreParser = class {
@@ -463,7 +513,8 @@ var CoreParser = class {
   messageQuads = Object.assign([], { messageCount: 0 });
   callbacks;
   strictNTriples;
-  strictNQuads;
+  /** Whether the format is N-Triples or N-Quads, which enables the strict line-based grammar. */
+  strictLineFormat;
   allowDotlessGraphTerminator;
   relax;
   defaultGraphTerm;
@@ -497,17 +548,26 @@ var CoreParser = class {
     this.namedNodeCache = state?.namedNodeCache ?? /* @__PURE__ */ new Map();
     const format = (options.format ?? "").toLowerCase();
     this.strictNTriples = format.includes("n-triples");
-    this.strictNQuads = format.includes("n-quads");
+    this.strictLineFormat = this.strictNTriples || format.includes("n-quads");
     this.allowDotlessGraphTerminator = format === "" || format.includes("trig");
   }
   parse(final = true) {
     while (true) {
       this.skipWsAndComments();
       if (this.index >= this.length) {
-        if (final) this.finalizeEndOfFileMessage();
-        return { quads: this.quads, messageQuads: this.messageQuads, prefixes: this.prefixes, messagesEnabled: this.messagesEnabled };
+        if (final) {
+          this.finalizeEndOfFileMessage();
+        }
+        return {
+          quads: this.quads,
+          messageQuads: this.messageQuads,
+          prefixes: this.prefixes,
+          messagesEnabled: this.messagesEnabled
+        };
       }
-      if ((this.strictNTriples || this.strictNQuads) && this.tryParseLineStatementFast()) continue;
+      if (this.strictLineFormat && this.tryParseLineStatementFast()) {
+        continue;
+      }
       this.parseStatement(this.defaultGraphTerm);
     }
   }
@@ -529,25 +589,37 @@ var CoreParser = class {
   tryParseLineStatementFast() {
     let i = this.index;
     const subject = this.readFastNode(i, false);
-    if (!subject || subject.termType === "Quad") return false;
+    if (!subject) {
+      return false;
+    }
     i = this.skipHws(this.fastEnd);
     const predicateEnd = this.readFastIriEnd(i);
-    if (predicateEnd < 0) return false;
+    if (predicateEnd < 0) {
+      return false;
+    }
     const predicate = this.cachedNamedNode(this.input.slice(i + 1, predicateEnd));
     i = this.skipHws(predicateEnd + 1);
     const object = this.readFastObject(i);
-    if (!object) return false;
+    if (!object) {
+      return false;
+    }
     i = this.skipHws(this.fastEnd);
     let graph = this.defaultGraphTerm;
     const graphStart = this.input.charCodeAt(i);
     if (graphStart === 60 || graphStart === 95 && this.input.charCodeAt(i + 1) === 58) {
-      if (this.strictNTriples) return false;
-      graph = this.readFastNode(i, true) ?? this.defaultGraphTerm;
-      if (graph === this.defaultGraphTerm && this.input.charCodeAt(i) !== 46) return false;
-      if (graph.termType === "Quad" || graph.termType === "Literal") return false;
+      if (this.strictNTriples) {
+        return false;
+      }
+      const graphTerm = this.readFastNode(i, true);
+      if (!graphTerm) {
+        return false;
+      }
+      graph = graphTerm;
       i = this.skipHws(this.fastEnd);
     }
-    if (this.input.charCodeAt(i) !== 46) return false;
+    if (this.input.charCodeAt(i) !== 46) {
+      return false;
+    }
     this.index = i + 1;
     this.addQuad(subject, predicate, object, graph);
     return true;
@@ -555,46 +627,70 @@ var CoreParser = class {
   readFastObject(index) {
     const code = this.input.charCodeAt(index);
     if (code === 60) {
-      if (this.input.charCodeAt(index + 1) === 60) return this.relax ? this.readFastTripleTerm(index) : null;
+      if (this.input.charCodeAt(index + 1) === 60) {
+        return this.relax ? this.readFastTripleTerm(index) : null;
+      }
       const end = this.readFastIriEnd(index);
-      if (end < 0) return null;
+      if (end < 0) {
+        return null;
+      }
       this.fastEnd = end + 1;
       return this.factory.namedNode(this.input.slice(index + 1, end));
     }
-    if (code === 95 && this.input.charCodeAt(index + 1) === 58) return this.readFastBlankNode(index);
-    if (code === 34) return this.readFastLiteral(index);
+    if (code === 95 && this.input.charCodeAt(index + 1) === 58) {
+      return this.readFastBlankNode(index);
+    }
+    if (code === 34) {
+      return this.readFastLiteral(index);
+    }
     return null;
   }
   readFastTripleTerm(index) {
     let i = index + 2;
     i = this.skipHws(i);
-    if (this.input.charCodeAt(i) !== 40) return null;
+    if (this.input.charCodeAt(i) !== 40) {
+      return null;
+    }
     i = this.skipHws(i + 1);
     const subject = this.readFastNode(i, false);
-    if (!subject || subject.termType === "Quad") return null;
+    if (!subject) {
+      return null;
+    }
     i = this.skipHws(this.fastEnd);
     const predicateEnd = this.readFastIriEnd(i);
-    if (predicateEnd < 0) return null;
+    if (predicateEnd < 0) {
+      return null;
+    }
     const predicate = this.cachedNamedNode(this.input.slice(i + 1, predicateEnd));
     i = this.skipHws(predicateEnd + 1);
     const object = this.readFastObject(i);
-    if (!object) return null;
+    if (!object) {
+      return null;
+    }
     i = this.skipHws(this.fastEnd);
-    if (this.input.charCodeAt(i) !== 41 || this.input.charCodeAt(i + 1) !== 62 || this.input.charCodeAt(i + 2) !== 62) return null;
+    if (this.input.charCodeAt(i) !== 41 || this.input.charCodeAt(i + 1) !== 62 || this.input.charCodeAt(i + 2) !== 62) {
+      return null;
+    }
     this.fastEnd = i + 3;
     return this.factory.quad(subject, predicate, object, this.factory.defaultGraph());
   }
   readFastNode(index, cache) {
     const code = this.input.charCodeAt(index);
     if (code === 60) {
-      if (this.input.charCodeAt(index + 1) === 60) return null;
+      if (this.input.charCodeAt(index + 1) === 60) {
+        return null;
+      }
       const end = this.readFastIriEnd(index);
-      if (end < 0) return null;
+      if (end < 0) {
+        return null;
+      }
       this.fastEnd = end + 1;
       const value = this.input.slice(index + 1, end);
       return cache ? this.cachedNamedNode(value) : this.factory.namedNode(value);
     }
-    if (code === 95 && this.input.charCodeAt(index + 1) === 58) return this.readFastBlankNode(index);
+    if (code === 95 && this.input.charCodeAt(index + 1) === 58) {
+      return this.readFastBlankNode(index);
+    }
     return null;
   }
   readFastBlankNode(index) {
@@ -602,23 +698,33 @@ var CoreParser = class {
     const start = i;
     while (i < this.length) {
       const code = this.input.charCodeAt(i);
-      if (!isNameChar(code)) break;
+      if (!isNameChar(code)) {
+        break;
+      }
       if (code === 46) {
         const next = this.input.charCodeAt(i + 1);
-        if (Number.isNaN(next) || isWs(next) || next === 59 || next === 44 || next === 125 || next === 93 || next === 41) break;
+        if (isDotTerminator(next)) {
+          break;
+        }
       }
       i++;
     }
-    if (i === start) return null;
+    if (i === start) {
+      return null;
+    }
     this.fastEnd = i;
     return this.blankNodeFromLabel(this.input.slice(start, i));
   }
   readFastLiteral(index) {
     const end = this.input.indexOf('"', index + 1);
-    if (end < 0) return null;
+    if (end < 0) {
+      return null;
+    }
     for (let i2 = index + 1; i2 < end; i2++) {
       const code = this.input.charCodeAt(i2);
-      if (code === 92 || code === 10 || code === 13) return null;
+      if (code === 92 || code === 10 || code === 13) {
+        return null;
+      }
     }
     const value = this.input.slice(index + 1, end);
     let i = end + 1;
@@ -627,21 +733,32 @@ var CoreParser = class {
       const start = ++i;
       while (i < this.length) {
         const code = this.input.charCodeAt(i);
-        if (code >= 65 && code <= 90 || code >= 97 && code <= 122 || code >= 48 && code <= 57 || code === 45) i++;
-        else break;
+        if (code >= 65 && code <= 90 || code >= 97 && code <= 122 || code >= 48 && code <= 57 || code === 45) {
+          i++;
+        } else {
+          break;
+        }
       }
-      if (i === start) return null;
+      if (i === start) {
+        return null;
+      }
       const tag = this.input.slice(start, i);
-      if (!this.relax && !isLanguageTagValid(tag)) return null;
+      if (!this.relax && !isLanguageTagValid(tag)) {
+        return null;
+      }
       this.fastEnd = i;
-      return this.factory.literal(value, tag.toLowerCase());
+      return this.languageLiteral(value, tag);
     }
     if (next === 94 && this.input.charCodeAt(i + 1) === 94) {
       i += 2;
       const datatypeEnd = this.readFastIriEnd(i);
-      if (datatypeEnd < 0) return null;
+      if (datatypeEnd < 0) {
+        return null;
+      }
       const datatypeValue = this.input.slice(i + 1, datatypeEnd);
-      if (!this.relax && (datatypeValue === RDF_LANG_STRING || datatypeValue === RDF_DIR_LANG_STRING)) return null;
+      if (!this.relax && (datatypeValue === RDF_LANG_STRING || datatypeValue === RDF_DIR_LANG_STRING)) {
+        return null;
+      }
       this.fastEnd = datatypeEnd + 1;
       return this.factory.literal(value, this.cachedNamedNode(datatypeValue));
     }
@@ -649,14 +766,22 @@ var CoreParser = class {
     return this.factory.literal(value);
   }
   readFastIriEnd(index) {
-    if (this.input.charCodeAt(index) !== 60) return -1;
+    if (this.input.charCodeAt(index) !== 60) {
+      return -1;
+    }
     const end = this.input.indexOf(">", index + 1);
-    if (end < 0) return -1;
-    if (this.relax) return end;
+    if (end < 0) {
+      return -1;
+    }
+    if (this.relax) {
+      return end;
+    }
     let hasScheme = false;
     for (let i = index + 1; i < end; i++) {
       const code = this.input.charCodeAt(i);
-      if (code === 58 && i > index + 1) hasScheme = true;
+      if (code === 58 && i > index + 1) {
+        hasScheme = true;
+      }
       if (code <= 32 || code === 34 || code === 60 || code === 92 || code === 94 || code === 96 || code === 123 || code === 124 || code === 125) {
         return -1;
       }
@@ -666,29 +791,41 @@ var CoreParser = class {
   skipHws(index) {
     while (index < this.length) {
       const code = this.input.charCodeAt(index);
-      if (code !== 32 && code !== 9) break;
+      if (code !== 32 && code !== 9) {
+        break;
+      }
       index++;
     }
     return index;
   }
   cachedNamedNode(value) {
     const cached = this.namedNodeCache.get(value);
-    if (cached) return cached;
+    if (cached) {
+      return cached;
+    }
     const node = this.factory.namedNode(value);
-    if (this.namedNodeCache.size < 4096) this.namedNodeCache.set(value, node);
+    if (this.namedNodeCache.size < 4096) {
+      this.namedNodeCache.set(value, node);
+    }
     return node;
   }
   parseStatement(defaultGraph2, allowGraphCloseTerminator = false, insideGraphBlock = false) {
     this.skipWsAndComments();
-    if (this.parseDirective(defaultGraph2)) return false;
+    if (this.parseDirective(defaultGraph2)) {
+      return false;
+    }
     if (this.peekCharCode() === 123) {
-      if (insideGraphBlock) this.fail("Graph blocks are not allowed inside graph blocks");
+      if (insideGraphBlock) {
+        this.fail("Graph blocks are not allowed inside graph blocks");
+      }
       this.index++;
       this.parseGraphStatements(defaultGraph2);
       return false;
     }
     if (this.matchWord("GRAPH")) {
-      if (insideGraphBlock) this.fail("Graph blocks are not allowed inside graph blocks");
+      if (insideGraphBlock) {
+        this.fail("Graph blocks are not allowed inside graph blocks");
+      }
       this.skipWsAndComments();
       const graph = this.parseGraphLabel(defaultGraph2);
       this.skipWsAndComments();
@@ -701,7 +838,9 @@ var CoreParser = class {
     const termEnd = this.index;
     this.skipWsAndComments();
     if (this.peekCharCode() === 123) {
-      if (insideGraphBlock) this.fail("Graph blocks are not allowed inside graph blocks");
+      if (insideGraphBlock) {
+        this.fail("Graph blocks are not allowed inside graph blocks");
+      }
       this.assertGraphLabel(subjectOrGraph, termStart, termEnd);
       this.index++;
       this.parseGraphStatements(subjectOrGraph);
@@ -712,7 +851,9 @@ var CoreParser = class {
         this.index++;
         return false;
       }
-      if (allowGraphCloseTerminator && this.peekCharCode() === 125) return true;
+      if (allowGraphCloseTerminator && this.peekCharCode() === 125) {
+        return true;
+      }
     }
     return this.parsePredicateObjectList(subjectOrGraph, defaultGraph2, 46, allowGraphCloseTerminator);
   }
@@ -720,12 +861,18 @@ var CoreParser = class {
     let lastStatementClosedByGraph = false;
     while (true) {
       this.skipWsAndComments();
-      if (this.index >= this.length) this.fail("Unclosed graph block");
+      if (this.index >= this.length) {
+        this.fail("Unclosed graph block");
+      }
       if (this.peekCharCode() === 125) {
         this.index++;
         this.skipWsAndComments();
-        if (lastStatementClosedByGraph && this.peekCharCode() === 46) this.fail("Expected . after triple");
-        if (this.peekCharCode() === 46) this.index++;
+        if (lastStatementClosedByGraph && this.peekCharCode() === 46) {
+          this.fail("Expected . after triple");
+        }
+        if (this.peekCharCode() === 46) {
+          this.index++;
+        }
         return;
       }
       lastStatementClosedByGraph = this.parseStatement(graph, this.allowDotlessGraphTerminator, true);
@@ -739,7 +886,9 @@ var CoreParser = class {
         const object = this.parseObject(graph);
         this.skipWsAndComments();
         if (terminatorCode === 46 && !allowGraphCloseTerminator && graph.termType === "DefaultGraph" && this.canStartTerm() && !this.nextIsStatementBoundary()) {
-          if (this.strictNTriples) this.fail("Graph terms are not allowed in N-Triples");
+          if (this.strictNTriples) {
+            this.fail("Graph terms are not allowed in N-Triples");
+          }
           const explicitGraph = this.parseNamedOrBlankTerm(graph);
           this.addQuad(subject, predicate, object, explicitGraph);
           this.skipWsAndComments();
@@ -747,20 +896,35 @@ var CoreParser = class {
           return false;
         }
         this.addQuad(subject, predicate, object, graph);
-        if (this.peekCharCode() !== 44) break;
-        if (this.strictNTriples || this.strictNQuads) this.fail("Object lists are not allowed in this format");
+        if (this.peekCharCode() !== 44) {
+          break;
+        }
+        if (this.strictLineFormat) {
+          this.fail("Object lists are not allowed in this format");
+        }
         this.index++;
         this.skipWsAndComments();
       }
-      if (this.peekCharCode() !== 59) break;
-      if (this.strictNTriples || this.strictNQuads) this.fail("Predicate lists are not allowed in this format");
+      if (this.peekCharCode() !== 59) {
+        break;
+      }
+      if (this.strictLineFormat) {
+        this.fail("Predicate lists are not allowed in this format");
+      }
       this.index++;
       this.skipWsAndComments();
-      if (this.peekCharCode() === terminatorCode || allowGraphCloseTerminator && this.peekCharCode() === 125) break;
+      if (this.peekCharCode() === terminatorCode || allowGraphCloseTerminator && this.peekCharCode() === 125) {
+        break;
+      }
     }
-    if (allowGraphCloseTerminator && this.peekCharCode() === 125) return true;
-    if (terminatorCode === 46) this.expectChar(46, "Expected . after triple");
-    else if (this.peekCharCode() !== terminatorCode) this.fail(`Expected ${String.fromCharCode(terminatorCode)} after property list`);
+    if (allowGraphCloseTerminator && this.peekCharCode() === 125) {
+      return true;
+    }
+    if (terminatorCode === 46) {
+      this.expectChar(46, "Expected . after triple");
+    } else if (this.peekCharCode() !== terminatorCode) {
+      this.fail(`Expected ${String.fromCharCode(terminatorCode)} after property list`);
+    }
     return false;
   }
   addQuad(subject, predicate, object, graph) {
@@ -775,7 +939,9 @@ var CoreParser = class {
   parseDirective(currentGraph) {
     const start = this.index;
     if (this.peekCharCode() === 64) {
-      if (this.strictNTriples || this.strictNQuads) this.fail("Directives are not allowed in this format");
+      if (this.strictLineFormat) {
+        this.fail("Directives are not allowed in this format");
+      }
       this.index++;
       if (this.matchWord("version")) {
         this.parseVersionDirective(true);
@@ -805,12 +971,16 @@ var CoreParser = class {
       return true;
     }
     if (this.matchWord("PREFIX")) {
-      if (this.strictNTriples || this.strictNQuads) this.fail("Directives are not allowed in this format");
+      if (this.strictLineFormat) {
+        this.fail("Directives are not allowed in this format");
+      }
       this.parsePrefixDirective(false);
       return true;
     }
     if (this.matchWord("BASE")) {
-      if (this.strictNTriples || this.strictNQuads) this.fail("Directives are not allowed in this format");
+      if (this.strictLineFormat) {
+        this.fail("Directives are not allowed in this format");
+      }
       this.parseBaseDirective(false);
       return true;
     }
@@ -819,15 +989,25 @@ var CoreParser = class {
   parseVersionDirective(needsDot) {
     this.skipWsAndComments();
     this.version = this.readQuotedString();
-    if (isMessagesVersion(this.version)) this.messagesEnabled = true;
+    if (isMessagesVersion(this.version)) {
+      this.messagesEnabled = true;
+    }
     this.skipWsAndComments();
-    if (needsDot) this.expectChar(46, "Expected . after version directive");
+    if (needsDot) {
+      this.expectChar(46, "Expected . after version directive");
+    }
   }
   parseMessageDirective(needsDot, currentGraph) {
-    if (!this.messagesEnabled) this.fail("RDF Messages are not enabled");
-    if (currentGraph.termType !== "DefaultGraph") this.fail("Message delimiters are not allowed inside graph blocks");
+    if (!this.messagesEnabled) {
+      this.fail("RDF Messages are not enabled");
+    }
+    if (currentGraph.termType !== "DefaultGraph") {
+      this.fail("Message delimiters are not allowed inside graph blocks");
+    }
     this.skipWsAndComments();
-    if (needsDot) this.expectChar(46, "Expected . after message directive");
+    if (needsDot) {
+      this.expectChar(46, "Expected . after message directive");
+    }
     this.finishMessage();
   }
   parsePrefixDirective(needsDot) {
@@ -839,17 +1019,21 @@ var CoreParser = class {
     this.prefixes[prefix] = iri;
     this.callbacks.prefix?.(prefix, iri);
     this.skipWsAndComments();
-    if (needsDot) this.expectChar(46, "Expected . after prefix directive");
+    if (needsDot) {
+      this.expectChar(46, "Expected . after prefix directive");
+    }
   }
   parseBaseDirective(needsDot) {
     this.skipWsAndComments();
     this.baseIRI = this.parseIri().value;
     this.skipWsAndComments();
-    if (needsDot) this.expectChar(46, "Expected . after base directive");
+    if (needsDot) {
+      this.expectChar(46, "Expected . after base directive");
+    }
   }
   parseSubject(graph) {
     const term = this.parseTerm(graph);
-    if (term.termType === "Literal" || term.termType === "DefaultGraph" || term.termType === "Variable" || (this.strictNTriples || this.strictNQuads) && term.termType === "Quad") {
+    if (term.termType === "Literal" || this.strictLineFormat && term.termType === "Quad") {
       this.fail(`Invalid subject term ${term.termType}`);
     }
     return term;
@@ -858,14 +1042,20 @@ var CoreParser = class {
     return this.parseTerm(graph);
   }
   parsePredicate(graph) {
-    if (this.matchWord("a")) return this.factory.namedNode(RDF_TYPE);
+    if (this.matchWord("a")) {
+      return this.factory.namedNode(RDF_TYPE);
+    }
     const term = this.parseTerm(graph);
-    if (term.termType !== "NamedNode") this.fail(`Invalid predicate term ${term.termType}`);
+    if (term.termType !== "NamedNode") {
+      this.fail(`Invalid predicate term ${term.termType}`);
+    }
     return term;
   }
   parseNamedOrBlankTerm(graph) {
     const term = this.parseTerm(graph);
-    if (term.termType !== "NamedNode" && term.termType !== "BlankNode") this.fail(`Invalid graph term ${term.termType}`);
+    if (term.termType !== "NamedNode" && term.termType !== "BlankNode") {
+      this.fail(`Invalid graph term ${term.termType}`);
+    }
     return term;
   }
   parseGraphLabel(graph) {
@@ -875,30 +1065,17 @@ var CoreParser = class {
     return term;
   }
   assertGraphLabel(term, start, end = this.index) {
-    if (term.termType !== "NamedNode" && term.termType !== "BlankNode") this.fail(`Invalid graph term ${term.termType}`);
+    if (term.termType !== "NamedNode" && term.termType !== "BlankNode") {
+      this.fail(`Invalid graph term ${term.termType}`);
+    }
     const code = this.input.charCodeAt(start);
     if (code === 91 && !this.isAnonymousBlankNodeLabel(start, end) || code === 40 || code === 60 && this.input.charCodeAt(start + 1) === 60) {
       this.fail(`Invalid graph term ${term.termType}`);
     }
   }
+  /** Whether the term in `[start, end)` is `[]`, possibly with whitespace and comments between the brackets. */
   isAnonymousBlankNodeLabel(start, end) {
-    if (this.input.charCodeAt(start) !== 91 || this.input.charCodeAt(end - 1) !== 93) return false;
-    let i = start + 1;
-    while (i < end - 1) {
-      const code = this.input.charCodeAt(i);
-      if (isWs(code)) {
-        i++;
-        continue;
-      }
-      if (code === 35) {
-        const commentEnd = scanCommentEnd(this.input, i);
-        if (commentEnd < 0 || commentEnd > end - 1) return false;
-        i = commentEnd;
-        continue;
-      }
-      return false;
-    }
-    return true;
+    return this.input.charCodeAt(start) === 91 && this.input.charCodeAt(end - 1) === 93 && scanTrailingTriviaEnd(this.input, start + 1) === end - 1;
   }
   isBlankNodePropertyListSubject(start, end) {
     return this.input.charCodeAt(start) === 91 && !this.isAnonymousBlankNodeLabel(start, end);
@@ -906,28 +1083,50 @@ var CoreParser = class {
   parseTerm(graph) {
     this.skipWsAndComments();
     const code = this.peekCharCode();
-    if (code < 0) this.fail("Unexpected end of input");
+    if (code < 0) {
+      this.fail("Unexpected end of input");
+    }
     if (code === 60) {
-      if (this.input.charCodeAt(this.index + 1) === 60) return this.parseDoubleAngleTerm(graph);
+      if (this.input.charCodeAt(this.index + 1) === 60) {
+        return this.parseDoubleAngleTerm(graph);
+      }
       return this.parseIri();
     }
-    if (code === 34 || code === 39) return this.parseLiteral();
-    if (code === 95 && this.input.charCodeAt(this.index + 1) === 58) return this.parseBlankNode();
-    if (code === 91) return this.parseBlankNodePropertyList(graph);
-    if (code === 40) return this.parseCollection(graph);
-    if (code === 43 || code === 45 || code >= 48 && code <= 57) return this.parseNumber();
-    if ((this.strictNTriples || this.strictNQuads) && (this.matchWord("true", true) || this.matchWord("false", true))) {
+    if (code === 34 || code === 39) {
+      return this.parseLiteral();
+    }
+    if (code === 95 && this.input.charCodeAt(this.index + 1) === 58) {
+      return this.parseBlankNode();
+    }
+    if (code === 91) {
+      return this.parseBlankNodePropertyList(graph);
+    }
+    if (code === 40) {
+      return this.parseCollection(graph);
+    }
+    if (code === 43 || code === 45 || code >= 48 && code <= 57) {
+      return this.parseNumber();
+    }
+    if (this.strictLineFormat && (this.matchWord("true", true) || this.matchWord("false", true))) {
       this.fail("Boolean literals are not allowed in this format");
     }
-    if (this.matchWord("true", true)) return this.factory.literal("true", this.factory.namedNode(XSD_BOOLEAN));
-    if (this.matchWord("false", true)) return this.factory.literal("false", this.factory.namedNode(XSD_BOOLEAN));
+    if (this.matchWord("true", true)) {
+      return this.factory.literal("true", this.factory.namedNode(XSD_BOOLEAN));
+    }
+    if (this.matchWord("false", true)) {
+      return this.factory.literal("false", this.factory.namedNode(XSD_BOOLEAN));
+    }
     return this.parsePrefixedName();
   }
   parseDoubleAngleTerm(graph) {
     this.index += 2;
     this.skipWsAndComments();
-    if (this.peekCharCode() === 40) return this.parseTripleTerm(graph);
-    if (this.strictNTriples || this.strictNQuads) this.fail("Reified triples are not allowed in this format");
+    if (this.peekCharCode() === 40) {
+      return this.parseTripleTerm(graph);
+    }
+    if (this.strictLineFormat) {
+      this.fail("Reified triples are not allowed in this format");
+    }
     return this.parseReifiedTriple(graph);
   }
   parseTripleTerm(graph) {
@@ -963,7 +1162,9 @@ var CoreParser = class {
     const start = this.index;
     const term = this.parseTerm(graph);
     this.assertReifiedTripleTerm(term, start, "subject");
-    if (term.termType === "Literal" || term.termType === "Quad") this.fail(`Invalid reified triple subject term ${term.termType}`);
+    if (term.termType === "Literal" || term.termType === "Quad") {
+      this.fail(`Invalid reified triple subject term ${term.termType}`);
+    }
     return term;
   }
   parseReifiedTripleObject(graph) {
@@ -975,15 +1176,18 @@ var CoreParser = class {
   parseReifier(graph) {
     this.index++;
     this.skipWsAndComments();
-    if (this.input.charCodeAt(this.index) === 62 && this.input.charCodeAt(this.index + 1) === 62) return this.createFreshBlankNode();
+    if (this.input.charCodeAt(this.index) === 62 && this.input.charCodeAt(this.index + 1) === 62) {
+      return this.createFreshBlankNode();
+    }
     const start = this.index;
     const term = this.parseTerm(graph);
     this.assertReifiedTripleTerm(term, start, "reifier");
-    if (term.termType !== "NamedNode" && term.termType !== "BlankNode") this.fail(`Invalid reifier term ${term.termType}`);
+    if (term.termType !== "NamedNode" && term.termType !== "BlankNode") {
+      this.fail(`Invalid reifier term ${term.termType}`);
+    }
     return term;
   }
   assertReifiedTripleTerm(term, start, position, end = this.index) {
-    if (term.termType === "DefaultGraph" || term.termType === "Variable") this.fail(`Invalid reified triple ${position} term ${term.termType}`);
     const code = this.input.charCodeAt(start);
     if (code === 40 || code === 91 && !this.isAnonymousBlankNodeLabel(start, end)) {
       this.fail(`Invalid reified triple ${position} term ${term.termType}`);
@@ -996,7 +1200,7 @@ var CoreParser = class {
       const code = this.peekCharCode();
       if (code === 62) {
         this.index++;
-        if ((this.strictNTriples || this.strictNQuads) && !/^[A-Za-z][A-Za-z0-9+.-]*:/.test(value)) {
+        if (this.strictLineFormat && !/^[A-Za-z][\d+.A-Za-z-]*:/u.test(value)) {
           this.fail("Relative IRIs are not allowed in this format");
         }
         return this.factory.namedNode(resolveIri(value, this.baseIRI));
@@ -1004,11 +1208,13 @@ var CoreParser = class {
       if (code === 92) {
         this.index++;
         const escapeCode = this.peekCharCode();
-        if ((this.strictNTriples || this.strictNQuads) && escapeCode !== 117 && escapeCode !== 85) {
+        if (this.strictLineFormat && escapeCode !== 117 && escapeCode !== 85) {
           this.fail("Only Unicode escapes are allowed in IRIs");
         }
         const escaped = this.readEscape();
-        if (isInvalidIriChar(escaped.codePointAt(0) ?? -1)) this.fail("Invalid character in IRI");
+        if (isInvalidIriChar(escaped.codePointAt(0))) {
+          this.fail("Invalid character in IRI");
+        }
         value += escaped;
         continue;
       }
@@ -1021,25 +1227,38 @@ var CoreParser = class {
     this.fail("Unterminated IRI");
   }
   parseLiteral() {
-    if ((this.strictNTriples || this.strictNQuads) && this.peekCharCode() !== 34) {
+    if (this.strictLineFormat && this.peekCharCode() !== 34) {
       this.fail("Only double-quoted literals are allowed in this format");
     }
     const value = this.readQuotedString();
     if (this.peekCharCode() === 64) {
       this.index++;
       const tag = this.readLanguageTag();
-      return this.factory.literal(value, tag);
+      return this.languageLiteral(value, tag);
     }
     if (this.peekCharCode() === 94 && this.input.charCodeAt(this.index + 1) === 94) {
       this.index += 2;
       const datatype = this.parseTerm(this.factory.defaultGraph());
-      if (datatype.termType !== "NamedNode") this.fail("Expected datatype IRI after ^^");
-      if ((this.strictNTriples || this.strictNQuads) && (datatype.value === RDF_LANG_STRING || datatype.value === RDF_DIR_LANG_STRING)) {
+      if (datatype.termType !== "NamedNode") {
+        this.fail("Expected datatype IRI after ^^");
+      }
+      if (this.strictLineFormat && (datatype.value === RDF_LANG_STRING || datatype.value === RDF_DIR_LANG_STRING)) {
         this.fail("Language string datatypes require an explicit language tag");
       }
       return this.factory.literal(value, datatype);
     }
     return this.factory.literal(value);
+  }
+  /** Creates a literal from a language tag, which may carry an RDF 1.2 base direction (`en--ltr`). */
+  languageLiteral(value, tag) {
+    const directionalSeparator = tag.indexOf("--");
+    if (directionalSeparator < 0) {
+      return this.factory.literal(value, tag.toLowerCase());
+    }
+    return this.factory.literal(value, {
+      language: tag.slice(0, directionalSeparator).toLowerCase(),
+      direction: tag.slice(directionalSeparator + 2).toLowerCase()
+    });
   }
   parseBlankNode() {
     this.index += 2;
@@ -1047,11 +1266,15 @@ var CoreParser = class {
     while (this.index < this.length && isNameChar(this.peekCharCode())) {
       if (this.peekCharCode() === 46) {
         const next = this.input.charCodeAt(this.index + 1);
-        if (Number.isNaN(next) || isWs(next) || next === 59 || next === 44 || next === 125 || next === 93 || next === 41) break;
+        if (isDotTerminator(next)) {
+          break;
+        }
       }
       this.index++;
     }
-    if (this.index === start) this.fail("Expected blank node label");
+    if (this.index === start) {
+      this.fail("Expected blank node label");
+    }
     return this.blankNodeFromLabel(this.input.slice(start, this.index));
   }
   parseBlankNodePropertyList(graph) {
@@ -1091,9 +1314,13 @@ var CoreParser = class {
     }
   }
   blankNodeFromLabel(label) {
-    if (!this.messagesEnabled) return this.factory.blankNode(label);
+    if (!this.messagesEnabled) {
+      return this.factory.blankNode(label);
+    }
     const existing = this.blankNodeLabels.get(label);
-    if (existing) return existing;
+    if (existing) {
+      return existing;
+    }
     const blank = this.createBlankNode(label);
     this.blankNodeLabels.set(label, blank);
     return blank;
@@ -1112,20 +1339,31 @@ var CoreParser = class {
     this.localBlankNodeCounter = 0;
   }
   finalizeEndOfFileMessage() {
-    if (!this.messagesEnabled) return;
-    if (!this.afterMessageDelimiter) this.messageCountHint = Math.max(this.messageCountHint, this.messageCounter + 1);
+    if (!this.messagesEnabled) {
+      return;
+    }
+    if (!this.afterMessageDelimiter) {
+      this.messageCountHint = Math.max(this.messageCountHint, this.messageCounter + 1);
+    }
     this.messageQuads.messageCount = this.messageCountHint;
   }
   parseNumber() {
-    if (this.strictNTriples || this.strictNQuads) this.fail("Numeric literals are not allowed in this format");
+    if (this.strictLineFormat) {
+      this.fail("Numeric literals are not allowed in this format");
+    }
     const rest = this.input.slice(this.index);
-    const match = /^[+-]?(?:(?:\d+\.\d*|\.\d+|\d+)[eE][+-]?\d+|(?:\d*\.\d+)|(?:\d+))/.exec(rest);
-    if (!match?.[0]) this.fail("Invalid number");
+    const match = /^[+-]?(?:(?:\d+\.\d*|\.\d+|\d+)[Ee][+-]?\d+|(?:\d*\.\d+)|\d+)/u.exec(rest);
+    if (!match?.[0]) {
+      this.fail("Invalid number");
+    }
     const value = match[0];
     this.index += value.length;
     let datatype = XSD_INTEGER;
-    if (/[eE]/.test(value)) datatype = XSD_DOUBLE;
-    else if (value.includes(".")) datatype = XSD_DECIMAL;
+    if (/[Ee]/u.test(value)) {
+      datatype = XSD_DOUBLE;
+    } else if (value.includes(".")) {
+      datatype = XSD_DECIMAL;
+    }
     return this.factory.literal(value, this.factory.namedNode(datatype));
   }
   parsePrefixedName() {
@@ -1134,21 +1372,29 @@ var CoreParser = class {
     const localStart = this.index;
     while (this.index < this.length) {
       const code = this.peekCharCode();
-      if (!isLocalNameChar(code)) break;
+      if (!isLocalNameChar(code)) {
+        break;
+      }
       if (code === 46) {
         const next = this.input.charCodeAt(this.index + 1);
-        if (Number.isNaN(next) || isWs(next) || next === 59 || next === 44 || next === 125 || next === 93 || next === 41) break;
+        if (isDotTerminator(next)) {
+          break;
+        }
       }
       this.index++;
     }
     const namespace = this.prefixes[prefix];
-    if (!namespace) this.fail(`Unknown prefix "${prefix}"`);
+    if (!namespace) {
+      this.fail(`Unknown prefix "${prefix}"`);
+    }
     return this.factory.namedNode(namespace.value + this.input.slice(localStart, this.index));
   }
   readQuotedString() {
     const quote = this.peekCharCode();
     const triple = this.input.charCodeAt(this.index + 1) === quote && this.input.charCodeAt(this.index + 2) === quote;
-    if ((this.strictNTriples || this.strictNQuads) && triple) this.fail("Long literals are not allowed in this format");
+    if (this.strictLineFormat && triple) {
+      this.fail("Long literals are not allowed in this format");
+    }
     this.index += triple ? 3 : 1;
     let value = "";
     while (this.index < this.length) {
@@ -1169,7 +1415,9 @@ var CoreParser = class {
         value += this.readEscape();
         continue;
       }
-      if (!triple && (code === 10 || code === 13)) this.fail("Line breaks are not allowed in literals");
+      if (!triple && (code === 10 || code === 13)) {
+        this.fail("Line breaks are not allowed in literals");
+      }
       value += this.input[this.index];
       this.advanceOne();
     }
@@ -1205,7 +1453,9 @@ var CoreParser = class {
       const size = code === 117 ? 4 : 8;
       this.index++;
       const hex = this.input.slice(this.index, this.index + size);
-      if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length !== size) this.fail("Invalid Unicode escape");
+      if (!/^[\dA-Fa-f]+$/u.test(hex) || hex.length !== size) {
+        this.fail("Invalid Unicode escape");
+      }
       this.index += size;
       return String.fromCodePoint(Number.parseInt(hex, 16));
     }
@@ -1214,7 +1464,9 @@ var CoreParser = class {
   readLanguageTag() {
     const start = this.index;
     const first = this.peekCharCode();
-    if (!(first >= 65 && first <= 90 || first >= 97 && first <= 122)) this.fail("Expected language tag");
+    if (!(first >= 65 && first <= 90 || first >= 97 && first <= 122)) {
+      this.fail("Expected language tag");
+    }
     while (this.index < this.length) {
       const code = this.peekCharCode();
       if (code >= 65 && code <= 90 || code >= 97 && code <= 122 || code >= 48 && code <= 57 || code === 45) {
@@ -1223,14 +1475,14 @@ var CoreParser = class {
         break;
       }
     }
-    if (this.index === start) this.fail("Expected language tag");
     const tag = this.input.slice(start, this.index);
     const directionalSeparator = tag.indexOf("--");
     const language = directionalSeparator >= 0 ? tag.slice(0, directionalSeparator) : tag;
     const direction = directionalSeparator >= 0 ? tag.slice(directionalSeparator + 2) : "";
-    if (!language) this.fail("Expected language tag");
     for (const subtag of language.split("-")) {
-      if (!subtag || subtag.length > 8) this.fail("Invalid language tag");
+      if (!subtag || subtag.length > 8) {
+        this.fail("Invalid language tag");
+      }
     }
     if (directionalSeparator >= 0 && direction !== "ltr" && direction !== "rtl") {
       this.fail("Invalid base direction");
@@ -1241,8 +1493,12 @@ var CoreParser = class {
     const start = this.index;
     while (this.index < this.length) {
       const code = this.peekCharCode();
-      if (code === 58) break;
-      if (!isPrefixNameChar(code)) break;
+      if (code === 58) {
+        break;
+      }
+      if (!isPrefixNameChar(code)) {
+        break;
+      }
       this.index++;
     }
     return this.input.slice(start, this.index);
@@ -1259,7 +1515,9 @@ var CoreParser = class {
         const start = this.index;
         while (this.index < this.length) {
           const next = this.peekCharCode();
-          if (next === 10 || next === 13) break;
+          if (next === 10 || next === 13) {
+            break;
+          }
           this.index++;
         }
         this.callbacks.comment?.(this.input.slice(start, this.index));
@@ -1269,11 +1527,17 @@ var CoreParser = class {
     }
   }
   matchWord(word, allowDotBoundary = false) {
-    if (this.input.length - this.index < word.length) return false;
-    if (this.input.slice(this.index, this.index + word.length).toLowerCase() !== word.toLowerCase()) return false;
+    if (this.input.length - this.index < word.length) {
+      return false;
+    }
+    if (this.input.slice(this.index, this.index + word.length).toLowerCase() !== word.toLowerCase()) {
+      return false;
+    }
     const previous = this.index > 0 ? this.input.charCodeAt(this.index - 1) : -1;
     const next = this.input.charCodeAt(this.index + word.length);
-    if (previous >= 0 && isWordBoundaryBlocker(previous) || isWordBoundaryBlocker(next) && !(allowDotBoundary && next === 46)) return false;
+    if (previous >= 0 && isWordBoundaryBlocker(previous) || isWordBoundaryBlocker(next) && !(allowDotBoundary && next === 46)) {
+      return false;
+    }
     this.index += word.length;
     return true;
   }
@@ -1287,14 +1551,18 @@ var CoreParser = class {
   }
   expectChar(code, message) {
     this.skipWsAndComments();
-    if (this.peekCharCode() !== code) this.fail(message);
+    if (this.peekCharCode() !== code) {
+      this.fail(message);
+    }
     this.index++;
   }
   peekCharCode() {
     return this.index < this.length ? this.input.charCodeAt(this.index) : -1;
   }
   advanceOne() {
-    if (this.input.charCodeAt(this.index) === 10) this.line++;
+    if (this.input.charCodeAt(this.index) === 10) {
+      this.line++;
+    }
     this.index++;
   }
   fail(message) {
@@ -1304,15 +1572,20 @@ var CoreParser = class {
   }
 };
 function resolveIri(value, baseIRI) {
-  if (!baseIRI || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value)) return value;
+  if (!baseIRI) {
+    return value;
+  }
   try {
-    return new URL(value, baseIRI).href;
+    return (0, import_relative_to_absolute_iri.resolve)(value, baseIRI);
   } catch {
     return value;
   }
 }
 function isMessagesVersion(version) {
   return typeof version === "string" && version.toLowerCase().endsWith("-messages");
+}
+function isDotTerminator(next) {
+  return Number.isNaN(next) || isWs(next) || next === 59 || next === 44 || next === 125 || next === 93 || next === 41;
 }
 function isWs(code) {
   return code === 32 || code === 9 || code === 10 || code === 13;
@@ -1339,68 +1612,16 @@ function isLanguageTagValid(tag) {
   const directionalSeparator = tag.indexOf("--");
   const language = directionalSeparator >= 0 ? tag.slice(0, directionalSeparator) : tag;
   const direction = directionalSeparator >= 0 ? tag.slice(directionalSeparator + 2) : "";
-  if (!language) return false;
   const first = language.charCodeAt(0);
-  if (!(first >= 65 && first <= 90 || first >= 97 && first <= 122)) return false;
+  if (!(first >= 65 && first <= 90 || first >= 97 && first <= 122)) {
+    return false;
+  }
   for (const subtag of language.split("-")) {
-    if (!subtag || subtag.length > 8) return false;
+    if (!subtag || subtag.length > 8) {
+      return false;
+    }
   }
   return directionalSeparator < 0 || direction === "ltr" || direction === "rtl";
-}
-function escapeString(value) {
-  return value.replace(/[\\"\n\r\t\b\f]/g, (character) => {
-    switch (character) {
-      case "\\":
-        return "\\\\";
-      case '"':
-        return '\\"';
-      case "\n":
-        return "\\n";
-      case "\r":
-        return "\\r";
-      case "	":
-        return "\\t";
-      case "\b":
-        return "\\b";
-      case "\f":
-        return "\\f";
-      default:
-        return character;
-    }
-  });
-}
-function termToString(term) {
-  switch (term.termType) {
-    case "NamedNode":
-      return `<${term.value.replace(/[>\\]/g, (character) => `\\${character}`)}>`;
-    case "BlankNode":
-      return `_:${term.value}`;
-    case "Variable":
-      return `?${term.value}`;
-    case "DefaultGraph":
-      return "";
-    case "Literal": {
-      const quoted = `"${escapeString(term.value)}"`;
-      if (term.language) return `${quoted}@${term.direction ? `${term.language}--${term.direction}` : term.language}`;
-      if (term.datatype.value === XSD_STRING) return quoted;
-      return `${quoted}^^<${term.datatype.value}>`;
-    }
-    case "Quad":
-      return `<<(${termToString(term.subject)} ${termToString(term.predicate)} ${termToString(term.object)})>>`;
-  }
-}
-function quadToString(quad2) {
-  const graph = quad2.graph.termType === "DefaultGraph" ? "" : ` ${termToString(quad2.graph)}`;
-  return `${termToString(quad2.subject)} ${termToString(quad2.predicate)} ${termToString(quad2.object)}${graph} .`;
-}
-function termToId(term) {
-  return termToString(term);
-}
-function termFromId(id) {
-  const parser = new CoreParser(`_:s <urn:p> ${id} .`, {}, {});
-  const quad2 = parser.parse().quads[0];
-  if (!quad2) throw new Error(`Invalid term id: ${id}`);
-  return quad2.object;
 }
 function isMessageQuad(value) {
   return Boolean(value && typeof value === "object" && "quad" in value && "messageCounter" in value);
@@ -1408,22 +1629,24 @@ function isMessageQuad(value) {
 function toMessages(output, messageCount) {
   const messages = [];
   const parsedMessageCount = messageCount ?? getMessageCount(output);
-  let sawMessageCounters = false;
   for (const item of output) {
     const entry = isMessageQuad(item) ? item : { quad: item, messageCounter: 0 };
-    sawMessageCounters ||= isMessageQuad(item);
-    while (messages.length <= entry.messageCounter) messages.push(new Message(messages.length));
+    while (messages.length <= entry.messageCounter) {
+      messages.push(new Message(messages.length));
+    }
     messages[entry.messageCounter].push(entry.quad);
   }
   if (parsedMessageCount !== void 0) {
-    while (messages.length < parsedMessageCount) messages.push(new Message(messages.length));
-  } else if (!sawMessageCounters && messages.length === 0) {
-    return [];
+    while (messages.length < parsedMessageCount) {
+      messages.push(new Message(messages.length));
+    }
   }
   return messages;
 }
 function getMessageCount(output) {
-  if (!Array.isArray(output) || !("messageCount" in output)) return void 0;
+  if (!Array.isArray(output) || !("messageCount" in output)) {
+    return void 0;
+  }
   const value = output.messageCount;
   return typeof value === "number" ? value : void 0;
 }
@@ -1452,10 +1675,6 @@ var quad = DataFactory.quad;
   literal,
   namedNode,
   quad,
-  quadToString,
-  termFromId,
-  termToId,
-  termToString,
   toMessages,
   variable
 });

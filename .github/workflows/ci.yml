@@ -1,4 +1,4 @@
-name: W3C RDF1.2 spec compliance
+name: CI
 
 on:
   push:
@@ -31,11 +31,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Type-check, build, unit test, and quick perf regression
+      - name: Type-check, lint, build, unit test with coverage, and quick perf regression
         run: npm run ci
         env:
           FORCE_COLOR: 1
           PERF_BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD^' }}
+
+      - name: Upload coverage to Coveralls
+        if: ${{ !cancelled() }}
+        uses: coverallsapp/github-action@v2
+        with:
+          file: coverage/lcov.info
 
   spec-compliance:
     name: Spec compliance tests

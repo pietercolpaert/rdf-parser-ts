@@ -1,3 +1,7 @@
+import type * as RDF from '@rdfjs/types';
+import { IncrementalParser, isMessageQuad } from './index';
+import type { ParserOptions, ParserOutputItem } from './index';
+
 export {
   BlankNode,
   DataFactory,
@@ -15,41 +19,19 @@ export {
   literal,
   namedNode,
   quad,
-  quadToString,
-  termFromId,
-  termToId,
-  termToString,
   toMessages,
   variable,
 } from './index';
 
-export { Writer } from 'rdf-writer-ts';
-
-import { IncrementalParser, isMessageQuad } from './index';
-
 export type {
-  BlankNodeLike,
-  DataFactoryLike,
-  DefaultGraphLike,
-  LiteralLike,
   MessageQuad,
   MessageQuadArray,
-  NamedNodeLike,
   ParseCallback,
   ParserEventCallbacks,
   ParserOptions,
   ParserOutput,
   ParserOutputItem,
-  QuadLike,
-  Term,
-  TermLike,
-  TermType,
-  VariableLike,
 } from './index';
-
-export type { WriterOptions, WriterOutputStream } from 'rdf-writer-ts';
-
-import type { MessageQuad, NamedNodeLike, ParserOptions, ParserOutputItem, QuadLike } from './index';
 
 type BrowserStreamChunk = string | Uint8Array | ArrayBuffer;
 type BrowserStreamEvent = 'prefix' | 'comment' | 'messageCounter';
@@ -57,6 +39,10 @@ type BrowserStreamListener = (...args: any[]) => void;
 
 export type StreamParserOptions = ParserOptions;
 
+/**
+ * Web Streams counterpart of the Node.js `StreamParser`: a `TransformStream`-like object that can be passed to
+ * `pipeThrough()`. It wraps an {@link IncrementalParser} and emits `prefix`, `comment` and `messageCounter` events.
+ */
 export class StreamParser {
   public readonly readable: ReadableStream<ParserOutputItem>;
   public readonly writable: WritableStream<BrowserStreamChunk>;
@@ -75,7 +61,7 @@ export class StreamParser {
       transform: (chunk, controller) => {
         this.enqueue(this.parser.write(this.decode(chunk)), controller);
       },
-      flush: controller => {
+      flush: (controller) => {
         this.enqueue(this.parser.end(this.decoder.decode()), controller);
       },
     });
@@ -97,22 +83,28 @@ export class StreamParser {
   }
 
   private decode(chunk: BrowserStreamChunk): string {
-    if (typeof chunk === 'string') return chunk;
+    if (typeof chunk === 'string') {
+      return chunk;
+    }
     const bytes = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
     return this.decoder.decode(bytes, { stream: true });
   }
 
   private enqueue(items: ParserOutputItem[], controller: TransformStreamDefaultController<ParserOutputItem>): void {
     for (const item of items) {
-      if (isMessageQuad(item)) this.emit('messageCounter', item.messageCounter, item.quad);
+      if (isMessageQuad(item)) {
+        this.emit('messageCounter', item.messageCounter, item.quad);
+      }
       controller.enqueue(item);
     }
   }
 
-  private emit(event: 'prefix', prefix: string, iri: NamedNodeLike): void;
+  private emit(event: 'prefix', prefix: string, iri: RDF.NamedNode): void;
   private emit(event: 'comment', comment: string): void;
-  private emit(event: 'messageCounter', counter: number, quad: QuadLike): void;
+  private emit(event: 'messageCounter', counter: number, quad: RDF.BaseQuad): void;
   private emit(event: BrowserStreamEvent, ...args: unknown[]): void {
-    for (const listener of this.listeners[event] ?? []) listener(...args);
+    for (const listener of this.listeners[event] ?? []) {
+      listener(...args);
+    }
   }
 }

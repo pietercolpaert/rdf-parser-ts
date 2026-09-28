@@ -23,7 +23,7 @@ perf/
 scripts/
 test/
 tsconfig.json
-vitest.config.ts
+vitest.config.mts
 
 # Generated local spec reports
 spec/earl-*.ttl

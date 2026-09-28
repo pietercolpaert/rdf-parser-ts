@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
-import { Parser, isMessageQuad, quadToString } from '../index';
+import { Parser, isMessageQuad } from '../index';
+import { quadToString } from '../serialize';
 
 function printUsage(): void {
   process.stderr.write(`Usage: rdf-parser-ts [--format FORMAT] [--base IRI] [--relax] [file]\n\nParses RDF and writes canonical N-Quads/N-Triples-style lines to stdout.\nWhen no file is passed, input is read from stdin.\n\nOptions:\n  --format, -f FORMAT  Input format (e.g. text/turtle, application/n-quads)\n  --base, -b IRI       Base IRI for relative references\n  --relax, -r          Enable relaxed parsing (skips some validation)\n  --silent, -s         Suppress output (useful for benchmarking)\n  --help, -h           Show this help message\n`);
@@ -9,11 +10,9 @@ function printUsage(): void {
 const args = process.argv.slice(2);
 let format: string | undefined;
 let baseIRI: string | undefined;
-let silent: boolean;
-let relax: boolean;
+let silent = false;
+let relax = false;
 let file: string | undefined;
-silent = false;
-relax = false;
 for (let i = 0; i < args.length; i++) {
   const arg = args[i];
   if (arg === '--help' || arg === '-h') {
@@ -22,6 +21,10 @@ for (let i = 0; i < args.length; i++) {
   }
   if (arg === '--format' || arg === '-f') {
     format = args[++i];
+    continue;
+  }
+  if (arg === '--relax' || arg === '-r') {
+    relax = true;
     continue;
   }
   if (arg === '--silent' || arg === '-s') {
@@ -59,8 +62,8 @@ try {
     }
     i++;
   }
-  console.error(`Parsed ${i} quads.`);
+  process.stderr.write(`Parsed ${i} quads.\n`);
 } catch (error) {
-  console.error(`Error: ${(error as Error).message}`);
+  process.stderr.write(`Error: ${(<Error>error).message}\n`);
   process.exit(1);
 }

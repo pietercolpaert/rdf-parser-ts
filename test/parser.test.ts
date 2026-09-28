@@ -1,10 +1,12 @@
 import { Readable, Writable } from 'node:stream';
+import type * as RDF from '@rdfjs/types';
 import { describe, expect, it } from 'vitest';
-import { DataFactory, Parser, StreamParser, isMessageQuad, quadToString, termFromId, termToString, type MessageQuad, type QuadLike } from '../src';
+import { DataFactory, Parser, StreamParser, isMessageQuad, type MessageQuad } from '../src';
 import { StreamParser as BrowserStreamParser } from '../src/browser';
+import { quadToString, termToString } from '../src/serialize';
 
 function ids(input: string, baseIRI = 'http://example.org/'): string[] {
-  return ((new Parser({ baseIRI }).parse(input) ?? []) as QuadLike[]).map(quadToString);
+  return (<RDF.BaseQuad[]>(new Parser({ baseIRI }).parse(input) ?? [])).map(quadToString);
 }
 
 async function writeChunk(parser: StreamParser, chunk: string | Buffer): Promise<void> {
@@ -159,20 +161,23 @@ _:b9751
     expect(ids('@prefix ex: <http://example.com/>. { ex:s ex:p ex:o }')).toEqual([
       '<http://example.com/s> <http://example.com/p> <http://example.com/o> .',
     ]);
-    expect(() => new Parser({ format: 'turtle' }).parse('{ <s> <p> <o> }')).toThrow(/Expected \./);
+    expect(() => new Parser({ format: 'turtle' }).parse('{ <s> <p> <o> }')).toThrow(/Expected \./u);
   });
 
   it('supports an RDF-JS factory override', () => {
-    const quads = (new Parser({ factory: DataFactory }).parse('<s> <p> "o" .') ?? []) as QuadLike[];
+    const quads = <RDF.BaseQuad[]>(new Parser({ factory: DataFactory }).parse('<s> <p> "o" .') ?? []);
     expect(quads[0]?.subject.termType).toBe('NamedNode');
     expect(quads[0]?.object.termType).toBe('Literal');
     expect(quads[0]?.graph.termType).toBe('DefaultGraph');
   });
 
-  it('converts terms to and from ids', () => {
-    const term = termFromId('"hello"@en');
-    expect(term.termType).toBe('Literal');
-    expect(termToString(term)).toBe('"hello"@en');
+  it('passes directional language tags to the factory as RDF/JS DirectionalLanguage objects', () => {
+    const quads = <RDF.BaseQuad[]>(new Parser().parse('<s> <p> "o"@EN--rtl .') ?? []);
+    const object = <RDF.Literal>quads[0]!.object;
+    expect(object.language).toBe('en');
+    expect(object.direction).toBe('rtl');
+    expect(object.datatype.value).toBe('http://www.w3.org/1999/02/22-rdf-syntax-ns#dirLangString');
+    expect(termToString(object)).toBe('"o"@en--rtl');
   });
 
   it('parses RDF1.2 triple terms and Turtle reified triples', () => {
@@ -185,7 +190,7 @@ _:b9751
     ]);
     expect(() => new Parser({ format: 'N-Quads' }).parse(
       '<< <http://example.org/s> <http://example.org/p> <http://example.org/o> >> <http://example.org/p2> <http://example.org/o2> .',
-    )).toThrow(/Reified triples are not allowed/);
+    )).toThrow(/Reified triples are not allowed/u);
   });
 });
 
@@ -195,9 +200,9 @@ describe('StreamParser', () => {
     expect(new StreamParser()).toBeInstanceOf(StreamParser);
   });
 
-  it('parses chunked streams', async () => {
+  it('parses chunked streams', async() => {
     const parser = new StreamParser({ baseIRI: 'http://example.org/' });
-    const input = Readable.from(['<a> <b>', ' <c>.\n', '<d> <e> <f>.']);
+    const input = Readable.from([ '<a> <b>', ' <c>.\n', '<d> <e> <f>.' ]);
     const output: string[] = [];
     const sink = new Writable({
       objectMode: true,
@@ -220,16 +225,16 @@ describe('StreamParser', () => {
     ]);
   });
 
-  it('emits complete statements before the stream ends', async () => {
+  it('emits complete statements before the stream ends', async() => {
     const parser = new StreamParser({ baseIRI: 'http://example.org/' });
     const output: string[] = [];
     parser.on('data', quad => output.push(quadToString(quad)));
 
     await writeChunk(parser, '<a> <b> <c>. ');
-    expect(output).toEqual(['<http://example.org/a> <http://example.org/b> <http://example.org/c> .']);
+    expect(output).toEqual([ '<http://example.org/a> <http://example.org/b> <http://example.org/c> .' ]);
 
     await writeChunk(parser, '<d> <e>');
-    expect(output).toEqual(['<http://example.org/a> <http://example.org/b> <http://example.org/c> .']);
+    expect(output).toEqual([ '<http://example.org/a> <http://example.org/b> <http://example.org/c> .' ]);
 
     await writeChunk(parser, ' <f>. ');
     expect(output).toEqual([
@@ -244,7 +249,7 @@ describe('StreamParser', () => {
     });
   });
 
-  it('preserves parser state across incremental stream parses', async () => {
+  it('preserves parser state across incremental stream parses', async() => {
     const parser = new StreamParser();
     const prefixes: string[] = [];
     const output: string[] = [];
@@ -252,11 +257,11 @@ describe('StreamParser', () => {
     parser.on('data', quad => output.push(quadToString(quad)));
 
     await writeChunk(parser, '@prefix ex: <http://example.com/>. ');
-    expect(prefixes).toEqual(['ex']);
+    expect(prefixes).toEqual([ 'ex' ]);
     expect(output).toEqual([]);
 
     await writeChunk(parser, 'ex:s ex:p ex:o. ');
-    expect(output).toEqual(['<http://example.com/s> <http://example.com/p> <http://example.com/o> .']);
+    expect(output).toEqual([ '<http://example.com/s> <http://example.com/p> <http://example.com/o> .' ]);
 
     await new Promise<void>((resolve, reject) => {
       parser.on('error', reject);
@@ -265,7 +270,7 @@ describe('StreamParser', () => {
     });
   });
 
-  it('decodes UTF-8 characters split across chunks', async () => {
+  it('decodes UTF-8 characters split across chunks', async() => {
     const parser = new StreamParser({ baseIRI: 'http://example.org/' });
     const output: string[] = [];
     const input = Buffer.from('<s> <p> "café". ', 'utf8');
@@ -275,7 +280,7 @@ describe('StreamParser', () => {
     await writeChunk(parser, input.subarray(0, split));
     expect(output).toEqual([]);
     await writeChunk(parser, input.subarray(split));
-    expect(output).toEqual(['<http://example.org/s> <http://example.org/p> "café" .']);
+    expect(output).toEqual([ '<http://example.org/s> <http://example.org/p> "café" .' ]);
 
     await new Promise<void>((resolve, reject) => {
       parser.on('error', reject);
@@ -284,7 +289,7 @@ describe('StreamParser', () => {
     });
   });
 
-  it('emits prefix and comment events', async () => {
+  it('emits prefix and comment events', async() => {
     const prefixes: string[] = [];
     const comments: string[] = [];
     const parser = new StreamParser({ comments: true });
@@ -295,11 +300,11 @@ describe('StreamParser', () => {
       parser.on('data', () => undefined);
       parser.on('error', reject);
       parser.on('end', resolve);
-      parser.import(Readable.from(['# hi\n@prefix ex: <http://example.com/>. ex:s ex:p ex:o.']));
+      parser.import(Readable.from([ '# hi\n@prefix ex: <http://example.com/>. ex:s ex:p ex:o.' ]));
     });
 
-    expect(prefixes).toEqual(['ex']);
-    expect(comments).toEqual([' hi']);
+    expect(prefixes).toEqual([ 'ex' ]);
+    expect(comments).toEqual([ ' hi' ]);
   });
 });
 
@@ -309,13 +314,15 @@ describe('Browser StreamParser', () => {
     const reader = stream.getReader();
     while (true) {
       const result = await reader.read();
-      if (result.done) break;
+      if (result.done) {
+        break;
+      }
       output.push(result.value);
     }
     return output;
   }
 
-  it('parses Web Streams incrementally', async () => {
+  it('parses Web Streams incrementally', async() => {
     const parser = new BrowserStreamParser({ baseIRI: 'http://example.org/' });
     const input = new ReadableStream<string>({
       start(controller) {
@@ -327,13 +334,13 @@ describe('Browser StreamParser', () => {
     });
 
     const output = await collect(parser.import(input));
-    expect(output.map(quad => quadToString(quad as QuadLike))).toEqual([
+    expect(output.map(quad => quadToString(<RDF.BaseQuad>quad))).toEqual([
       '<http://example.org/a> <http://example.org/b> <http://example.org/c> .',
       '<http://example.org/d> <http://example.org/e> <http://example.org/f> .',
     ]);
   });
 
-  it('preserves prefixes and decodes split UTF-8 byte chunks', async () => {
+  it('preserves prefixes and decodes split UTF-8 byte chunks', async() => {
     const prefixes: string[] = [];
     const parser = new BrowserStreamParser({ baseIRI: 'http://example.org/' });
     parser.on('prefix', prefix => prefixes.push(prefix));
@@ -349,13 +356,13 @@ describe('Browser StreamParser', () => {
     });
 
     const output = await collect(parser.import(stream));
-    expect(prefixes).toEqual(['ex']);
-    expect(output.map(quad => quadToString(quad as QuadLike))).toEqual([
+    expect(prefixes).toEqual([ 'ex' ]);
+    expect(output.map(quad => quadToString(<RDF.BaseQuad>quad))).toEqual([
       '<http://example.com/s> <http://example.com/p> "café" .',
     ]);
   });
 
-  it('emits message counters in browser Web Streams', async () => {
+  it('emits message counters in browser Web Streams', async() => {
     const counters: number[] = [];
     const parser = new BrowserStreamParser({ baseIRI: 'http://example.org/' });
     parser.addEventListener('messageCounter', counter => counters.push(counter));
@@ -368,9 +375,9 @@ describe('Browser StreamParser', () => {
     });
 
     const output = await collect(parser.import(stream));
-    expect(counters).toEqual([0, 1]);
+    expect(counters).toEqual([ 0, 1 ]);
     expect(output.every(isMessageQuad)).toBe(true);
-    expect((output as MessageQuad[]).map(entry => quadToString(entry.quad))).toEqual([
+    expect((<MessageQuad[]>output).map(entry => quadToString(entry.quad))).toEqual([
       '<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .',
       '<http://example.org/s2> <http://example.org/p> <http://example.org/o2> .',
     ]);

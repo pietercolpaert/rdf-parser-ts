@@ -1,6 +1,8 @@
 # RDF Parser for TypeScript
 
-[![W3C RDF1.2 spec compliance](https://github.com/pietercolpaert/rdf-parser-ts/actions/workflows/ci.yml/badge.svg)](https://github.com/pietercolpaert/rdf-parser-ts/actions/workflows/ci.yml)
+[![CI](https://github.com/pietercolpaert/rdf-parser-ts/actions/workflows/ci.yml/badge.svg)](https://github.com/pietercolpaert/rdf-parser-ts/actions/workflows/ci.yml)
+[![Coverage Status](https://coveralls.io/repos/github/pietercolpaert/rdf-parser-ts/badge.svg?branch=main)](https://coveralls.io/github/pietercolpaert/rdf-parser-ts?branch=main)
+[![npm version](https://img.shields.io/npm/v/rdf-parser-ts.svg)](https://www.npmjs.com/package/rdf-parser-ts)
 
 Fast RDF/JS parsing for Turtle, TriG, N-Triples, N-Quads, RDF 1.2 triple terms, and RDF Message Logs in Node.js and browsers.
 
@@ -21,7 +23,9 @@ npm install rdf-parser-ts
 
 ## Package layout
 
-- `src/index.ts` contains the RDF-JS data model, parser, stream parser, incremental parser, and parser helpers.
+- `src/index.ts` contains the RDF-JS data model, parser, stream parser, and incremental parser.
+- `src/browser.ts` is the browser entry, with a Web Streams based `StreamParser`.
+- `src/serialize.ts` is a minimal, internal N-Quads serializer used by the CLI and the tests (not exported).
 - `src/bin/rdf-parser-ts` provides the `rdf-parser-ts` CLI.
 - `test/` contains Vitest unit tests.
 - `spec/` contains the `rdf-test-suite` adapter and EARL metadata, matching the N3.js spec-test setup.
@@ -33,9 +37,10 @@ npm install rdf-parser-ts
 ```sh
 npm run build          # Build CommonJS, ESM, declarations, CLI, and browser bundles
 npm run build:browser  # Build dist/browser/index.mjs and dist/browser/index.global.js
-npm run lint           # Type-check with tsc --noEmit
-npm test               # Run unit tests
-npm run check          # Type-check, build, then test
+npm run typecheck      # Type-check with tsc --noEmit
+npm run lint           # Lint with @rubensworks/eslint-config
+npm test               # Run unit tests; fails below 100% coverage
+npm run check          # Type-check, lint, build, then test
 npm run ci             # Run check plus the performance regression warning check
 npm run spec           # Run RDF 1.1 and RDF 1.2 spec suites
 npm run perf           # Benchmark 10^4, 10^5, and 10^6 generated statements
@@ -60,20 +65,20 @@ The package exports CommonJS, ESM, and browser builds:
 With a browser-aware bundler, import the browser entry explicitly:
 
 ```ts
-import { Parser, StreamParser, quadToString } from 'rdf-parser-ts/browser';
+import { Parser } from 'rdf-parser-ts/browser';
 
 const quads = new Parser({ baseIRI: 'https://example.org/' }).parse('<s> <p> <o>.') ?? [];
-console.log(quadToString(quads[0]!));
+console.log(quads[0]!.subject.value);
 ```
 
 For direct browser usage through a CDN, use the ESM bundle:
 
 ```html
 <script type="module">
-	import { Parser, quadToString } from 'https://cdn.jsdelivr.net/npm/rdf-parser-ts/dist/browser/index.mjs';
+	import { Parser } from 'https://cdn.jsdelivr.net/npm/rdf-parser-ts/dist/browser/index.mjs';
 
 	const quads = new Parser({ baseIRI: 'https://example.org/' }).parse('<s> <p> <o>.') ?? [];
-	console.log(quadToString(quads[0]));
+	console.log(quads[0].subject.value);
 </script>
 ```
 
@@ -82,22 +87,22 @@ Or use the global bundle, which exposes `RDFParserTS`:
 ```html
 <script src="https://unpkg.com/rdf-parser-ts/dist/browser/index.global.js"></script>
 <script>
-	const { Parser, quadToString } = RDFParserTS;
+	const { Parser } = RDFParserTS;
 	const quads = new Parser({ baseIRI: 'https://example.org/' }).parse('<s> <p> <o>.') || [];
-	console.log(quadToString(quads[0]));
+	console.log(quads[0].subject.value);
 </script>
 ```
 
 For streaming in browsers, `StreamParser` works with Web Streams. It can be passed to `pipeThrough()` or used through its `import()` convenience method:
 
 ```ts
-import { StreamParser, quadToString } from 'rdf-parser-ts/browser';
+import { StreamParser } from 'rdf-parser-ts/browser';
 
 const parser = new StreamParser({ baseIRI: 'https://example.org/' });
 const rdfStream = new Blob(['<s> <p>', ' <o>.']).stream();
 
 for await (const quad of rdfStream.pipeThrough(parser)) {
-	console.log(quadToString(quad));
+	console.log(quad.subject.value, quad.predicate.value, quad.object.value);
 }
 ```
 
@@ -105,13 +110,13 @@ Current minified browser bundle sizes after `npm run build`, measured with `gzip
 
 | Bundle | Minified | gzip compressed |
 | --- | ---: | ---: |
-| `dist/browser/index.mjs` | 42,908 bytes (41.9 KiB) | 11,032 bytes (10.8 KiB) |
-| `dist/browser/index.global.js` | 43,393 bytes (42.4 KiB) | 11,223 bytes (11.0 KiB) |
+| `dist/browser/index.mjs` | 32,710 bytes (31.9 KiB) | 8,822 bytes (8.6 KiB) |
+| `dist/browser/index.global.js` | 32,892 bytes (32.1 KiB) | 8,870 bytes (8.7 KiB) |
 
 ## Parsing strings
 
 ```ts
-import { Parser, quadToString } from 'rdf-parser-ts';
+import { Parser } from 'rdf-parser-ts';
 
 const parser = new Parser({ baseIRI: 'http://example.org/' });
 const quads = parser.parse(`
@@ -123,7 +128,6 @@ const quads = parser.parse(`
 
 for (const quad of quads ?? []) {
 	console.log(quad.subject.termType, quad.predicate.value, quad.object.value);
-	console.log(quadToString(quad));
 }
 ```
 
@@ -141,9 +145,9 @@ parser.parse('<s> <p> <o>.', (error, quad, prefixes) => {
 
 ### Parser options
 
-- `baseIRI` / `baseIRIPath`: resolve relative IRIs.
+- `baseIRI` / `baseIRIPath`: resolve relative IRIs, following RFC 3986 (via [relative-to-absolute-iri](https://github.com/rubensworks/relative-to-absolute-iri.js)).
 - `format`: hint the input format, such as `text/turtle`, `application/n-triples`, `application/n-quads`, or `application/trig`.
-- `factory`: custom RDF-JS data factory.
+- `factory`: custom [RDF/JS `DataFactory`](https://rdf.js.org/data-model-spec/#datafactory-interface).
 - `comments`: emit comment events in streaming mode.
 - `relax`: enable the faster relaxed line-format path for generated input.
 - `rdfMessages` / `messages`: force RDF Messages mode.
@@ -157,7 +161,7 @@ RDF Messages mode is enabled automatically when the input contains a messages ve
 When RDF Messages mode is active, `Parser#parse()` returns entries that contain both the parsed quad and the message counter. Counters start at `0` and increase at each `MESSAGE` or `@message .` delimiter.
 
 ```ts
-import { Parser, isMessageQuad, quadToString } from 'rdf-parser-ts';
+import { Parser, isMessageQuad } from 'rdf-parser-ts';
 
 const output = new Parser().parse(`
 	VERSION "1.2-messages"
@@ -168,7 +172,7 @@ const output = new Parser().parse(`
 
 for (const entry of output ?? []) {
 	if (isMessageQuad(entry)) {
-		console.log(entry.messageCounter, quadToString(entry.quad));
+		console.log(entry.messageCounter, entry.quad.subject.value);
 	}
 }
 ```
@@ -178,7 +182,7 @@ The callback form still emits quads, with an additional optional message-counter
 ```ts
 new Parser().parse(input, (error, quad, prefixes, messageCounter) => {
 	if (error) throw error;
-	if (quad) console.log(messageCounter, quadToString(quad));
+	if (quad) console.log(messageCounter, quad.subject.value);
 });
 ```
 
@@ -212,7 +216,7 @@ Blank node labels are scoped per message in RDF Messages mode, so the same blank
 
 ## Streaming and incremental parsing
 
-`StreamParser` is a Node.js `Transform` stream in object mode. It accepts string or `Buffer` chunks and emits RDF-JS quads. In RDF Messages mode, it emits `{ quad, messageCounter }` entries and a `messageCounter` event for each parsed quad.
+`StreamParser` is a Node.js `Transform` stream in object mode, built on [readable-stream](https://github.com/nodejs/readable-stream) so it also works when bundled for browsers. It accepts string or `Buffer` chunks and emits RDF-JS quads. In RDF Messages mode, it emits `{ quad, messageCounter }` entries and a `messageCounter` event for each parsed quad.
 
 ```ts
 import { createReadStream } from 'node:fs';
@@ -243,7 +247,17 @@ const parser = new StreamParser();
 parser.import(createReadStream('data.ttl')).on('data', quad => console.log(quad));
 ```
 
-`IncrementalParser` exposes the same chunking logic without Node streams. Call `write(chunk)` for each partial input chunk and `end(optionalFinalChunk)` when the input is complete; both methods return any complete RDF-JS output items parsed from the accumulated text.
+`IncrementalParser` exposes the same chunking logic without any stream implementation. Call `write(chunk)` for each partial input chunk and `end(optionalFinalChunk)` when the input is complete; both methods return any complete RDF-JS output items parsed from the accumulated text.
+
+```ts
+import { IncrementalParser } from 'rdf-parser-ts';
+
+const parser = new IncrementalParser({ baseIRI: 'http://example.org/' });
+parser.write('<s> <p> "a" .\n<s> <p> "b');  // [quad for "a"]; the incomplete statement is buffered
+parser.end('" .');                          // [quad for "b"]
+```
+
+How the parsers relate: the internal core parser is a recursive-descent parser over one complete string. `Parser` runs it once over the whole input. `IncrementalParser` buffers chunks, runs the core parser on every complete statement prefix, and carries the parser state (prefixes, base IRI, blank node labels, message counters) over to the next chunk. Both `StreamParser`s (Node.js and Web Streams) are thin wrappers around `IncrementalParser`.
 
 ## RDF-JS data model
 
@@ -267,14 +281,14 @@ Public exports include:
 - `Parser`: string parser with `parse()` and `parseMessages()`.
 - `StreamParser`: Node/browser stream parser with `import()`.
 - `IncrementalParser`: chunked parser with `write()` and `end()`.
-- `DataFactory`: RDF-JS factory for `namedNode()`, `blankNode()`, `literal()`, `variable()`, `defaultGraph()`, and `quad()`.
-- `NamedNode`, `BlankNode`, `Literal`, `Variable`, `DefaultGraph`, `Quad`, and `Message`: lightweight RDF-JS term classes.
+- `DataFactory`: RDF/JS `DataFactory` with `namedNode()`, `blankNode()`, `literal()`, `variable()`, `defaultGraph()`, `quad()`, `fromTerm()`, and `fromQuad()`.
+- `NamedNode`, `BlankNode`, `Literal`, `Variable`, `DefaultGraph`, and `Quad`: lightweight RDF/JS term classes.
+- `Message`: an array of the quads in one RDF Message, the only data model class beyond the RDF/JS interfaces.
 - Factory aliases: `namedNode`, `blankNode`, `literal`, `variable`, `defaultGraph`, and `quad`.
-- `termToString()`: serialize a term for diagnostics and IDs.
-- `quadToString()`: serialize a quad in line syntax.
-- `termToId()` / `termFromId()`: convert terms to and from stable string IDs.
 - `isMessageQuad()`: type guard for `{ quad, messageCounter }` entries.
 - `toMessages()`: group parser output into `Message[]`.
+
+All types use the [`@rdfjs/types`](https://github.com/rdfjs/types) interfaces directly. To serialize quads, use a writer such as [rdf-writer-ts](https://github.com/pietercolpaert/rdf-writer-ts).
 
 ## Custom RDF-JS factories
 
@@ -307,6 +321,8 @@ Options:
 
 - `--format`, `-f`: format hint, such as `text/turtle` or `application/n-quads`.
 - `--base`, `-b`: base IRI for relative IRIs.
+- `--relax`, `-r`: enable relaxed parsing.
+- `--silent`, `-s`: suppress output.
 - `--help`, `-h`: print usage.
 
 ## RDF Working Group test suites
@@ -339,7 +355,7 @@ npm run spec-1-2-trig
 
 Generate EARL reports with `npm run spec-1-1-earl` or `npm run spec-1-2-earl`, and use `npm run spec-clean` to remove the manifest cache.
 
-The N-Triples and N-Quads RDF 1.1/RDF 1.2 scripts run without skips. The Turtle and TriG scripts run the same official manifests with explicit `--skip` patterns for currently unsupported edge cases such as full PN_CHARS Unicode coverage, escaped prefixed names, some IRI-resolution cases, RDF 1.2 annotation/reifier syntax, and Turtle/TriG version directives. This keeps `npm run spec` reproducible and green while making remaining conformance work visible in `package.json`.
+The N-Triples and N-Quads RDF 1.1/RDF 1.2 scripts run without skips. The Turtle and TriG scripts run the same official manifests with explicit `--skip` patterns for currently unsupported edge cases such as full PN_CHARS Unicode coverage, escaped prefixed names, RDF 1.2 annotation/reifier syntax, and Turtle/TriG version directives. This keeps `npm run spec` reproducible and green while making remaining conformance work visible in `package.json`.
 
 ## Performance benchmarks
 

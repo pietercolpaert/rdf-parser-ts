@@ -1,16 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { DataFactory, Parser, Quad, isMessageQuad, quadToString, toMessages, type Message, type QuadLike } from '../src';
+import { Parser, isMessageQuad, toMessages, type Message } from '../src';
+import { quadToString } from '../src/serialize';
 
 const SPEC_URL = 'https://w3c-cg.github.io/rsp/spec/messages-tests';
 const url = (fragment: string): string => `${SPEC_URL}#${fragment}`;
-
-function nn(value: string) {
-  return DataFactory.namedNode(value);
-}
-
-function quad(subject: string, predicate: string, object: string, graph?: string): QuadLike {
-  return new Quad(nn(subject), nn(predicate), nn(object), graph ? nn(graph) : DataFactory.defaultGraph());
-}
 
 function messageIds(messages: Message[]): string[][] {
   return messages.map(message => Array.from(message, quadToString));
@@ -28,7 +21,7 @@ describe('RDF Messages spec parsing tests', () => {
       input: `VERSION "1.2-messages"
 <http://example.org/s1> <http://example.org/p> <http://example.org/o1> .`,
       expected: [
-        ['<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .'],
+        [ '<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .' ],
       ],
     },
     {
@@ -39,8 +32,8 @@ describe('RDF Messages spec parsing tests', () => {
 MESSAGE
 <http://example.org/s2> <http://example.org/p> <http://example.org/o2> .`,
       expected: [
-        ['<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .'],
-        ['<http://example.org/s2> <http://example.org/p> <http://example.org/o2> .'],
+        [ '<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .' ],
+        [ '<http://example.org/s2> <http://example.org/p> <http://example.org/o2> .' ],
       ],
     },
     {
@@ -53,8 +46,8 @@ ex:s1 ex:p ex:o1 .
 @message .
 ex:s2 ex:p ex:o2 .`,
       expected: [
-        ['<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .'],
-        ['<http://example.org/s2> <http://example.org/p> <http://example.org/o2> .'],
+        [ '<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .' ],
+        [ '<http://example.org/s2> <http://example.org/p> <http://example.org/o2> .' ],
       ],
     },
     {
@@ -65,7 +58,7 @@ MESSAGE
 <http://example.org/s1> <http://example.org/p> <http://example.org/o1> .`,
       expected: [
         [],
-        ['<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .'],
+        [ '<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .' ],
       ],
     },
     {
@@ -77,9 +70,9 @@ MESSAGE
 MESSAGE
 <http://example.org/s2> <http://example.org/p> <http://example.org/o2> .`,
       expected: [
-        ['<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .'],
+        [ '<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .' ],
         [],
-        ['<http://example.org/s2> <http://example.org/p> <http://example.org/o2> .'],
+        [ '<http://example.org/s2> <http://example.org/p> <http://example.org/o2> .' ],
       ],
     },
     {
@@ -89,7 +82,7 @@ MESSAGE
 <http://example.org/s1> <http://example.org/p> <http://example.org/o1> .
 MESSAGE`,
       expected: [
-        ['<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .'],
+        [ '<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .' ],
       ],
     },
     {
@@ -101,8 +94,8 @@ MESSAGE`,
 MESSAGE
 <http://example.org/s2> <http://example.org/p> <http://example.org/o2> <http://example.org/g2> .`,
       expected: [
-        ['<http://example.org/s1> <http://example.org/p> <http://example.org/o1> <http://example.org/g1> .'],
-        ['<http://example.org/s2> <http://example.org/p> <http://example.org/o2> <http://example.org/g2> .'],
+        [ '<http://example.org/s1> <http://example.org/p> <http://example.org/o1> <http://example.org/g1> .' ],
+        [ '<http://example.org/s2> <http://example.org/p> <http://example.org/o2> <http://example.org/g2> .' ],
       ],
     },
     {
@@ -124,7 +117,7 @@ ex:s4 ex:p ex:o4 .`,
           '<http://example.org/s2> <http://example.org/p> <http://example.org/o2> <http://example.org/g> .',
           '<http://example.org/s3> <http://example.org/p> <http://example.org/o3> <http://example.org/g> .',
         ],
-        ['<http://example.org/s4> <http://example.org/p> <http://example.org/o4> .'],
+        [ '<http://example.org/s4> <http://example.org/p> <http://example.org/o4> .' ],
       ],
     },
     {
@@ -137,8 +130,8 @@ MESSAGE
 PREFIX ex: <http://example.org/two/>
 ex:s ex:p ex:o .`,
       expected: [
-        ['<http://example.org/one/s> <http://example.org/one/p> <http://example.org/one/o> .'],
-        ['<http://example.org/two/s> <http://example.org/two/p> <http://example.org/two/o> .'],
+        [ '<http://example.org/one/s> <http://example.org/one/p> <http://example.org/one/o> .' ],
+        [ '<http://example.org/two/s> <http://example.org/two/p> <http://example.org/two/o> .' ],
       ],
     },
     {
@@ -151,8 +144,8 @@ ex:s ex:p ex:o .`,
 MESSAGE
 <http://example.org/d> <http://example.org/e> <http://example.org/f> .`,
       expected: [
-        ['<http://example.org/a> <http://example.org/b> <http://example.org/c> <http://example.org/g> .'],
-        ['<http://example.org/d> <http://example.org/e> <http://example.org/f> .'],
+        [ '<http://example.org/a> <http://example.org/b> <http://example.org/c> <http://example.org/g> .' ],
+        [ '<http://example.org/d> <http://example.org/e> <http://example.org/f> .' ],
       ],
     },
   ];
@@ -188,9 +181,9 @@ PREFIX ex: <http://example.org/three/>
 ex:s ex:p ex:o .`);
 
     expect(messageIds(messages)).toEqual([
-      ['<http://example.org/one/s> <http://example.org/one/p> <http://example.org/one/o> .'],
-      ['<http://example.org/two/s> <http://example.org/two/p> <http://example.org/two/o> .'],
-      ['<http://example.org/three/s> <http://example.org/three/p> <http://example.org/three/o> .'],
+      [ '<http://example.org/one/s> <http://example.org/one/p> <http://example.org/one/o> .' ],
+      [ '<http://example.org/two/s> <http://example.org/two/p> <http://example.org/two/o> .' ],
+      [ '<http://example.org/three/s> <http://example.org/three/p> <http://example.org/three/o> .' ],
     ]);
   });
 
@@ -201,8 +194,8 @@ ex:s ex:p ex:o .`);
 <http://example.org/s2> <http://example.org/p> <http://example.org/o2>.`);
 
     expect(messageIds(messages)).toEqual([
-      ['<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .'],
-      ['<http://example.org/s2> <http://example.org/p> <http://example.org/o2> .'],
+      [ '<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .' ],
+      [ '<http://example.org/s2> <http://example.org/p> <http://example.org/o2> .' ],
     ]);
   });
 
@@ -216,8 +209,8 @@ MESSAGE
 MESSAGE`);
 
     expect(messageIds(messages)).toEqual([
-      ['<http://example.org/m1> <http://example.org/p> <http://example.org/o1> .'],
-      ['<http://example.org/m2> <http://example.org/p> <http://example.org/o2> .'],
+      [ '<http://example.org/m1> <http://example.org/p> <http://example.org/o1> .' ],
+      [ '<http://example.org/m2> <http://example.org/p> <http://example.org/o2> .' ],
       [],
     ]);
   });
@@ -235,8 +228,8 @@ MESSAGE
 MESSAGE`);
 
     expect(messageIds(messages)).toEqual([
-      ['<http://example.org/m1> <http://example.org/p> <http://example.org/o1> .'],
-      ['<http://example.org/m2> <http://example.org/p> <http://example.org/o2> .'],
+      [ '<http://example.org/m1> <http://example.org/p> <http://example.org/o1> .' ],
+      [ '<http://example.org/m2> <http://example.org/p> <http://example.org/o2> .' ],
       [],
       [
         '_:m3_b0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies> <<(<http://example.org/s1> <http://example.org/p> <http://example.org/o3>)>> .',
@@ -250,13 +243,13 @@ MESSAGE`);
 describe('RDF Messages spec error tests', () => {
   it(`1.3.1 Message Delimiter Without Message Support — ${url('message-delimiter-without-message-support')}`, () => {
     expect(() => new Parser().parse(`<http://example.org/s> <http://example.org/p> <http://example.org/o> .
-MESSAGE`)).toThrow(/RDF Messages are not enabled/);
+MESSAGE`)).toThrow(/RDF Messages are not enabled/u);
   });
 
   it(`1.3.2 @message Without Trailing Dot — ${url('at-message-without-trailing-dot')}`, () => {
     expect(() => new Parser().parse(`VERSION "1.2-messages"
 <http://example.org/s> <http://example.org/p> <http://example.org/o> .
-@message <http://example.org/invalid>`)).toThrow(/Expected \./);
+@message <http://example.org/invalid>`)).toThrow(/Expected \./u);
   });
 
   it(`1.3.3 Message Delimiter Inside An Open Graph Block — ${url('message-delimiter-inside-an-open-graph-block')}`, () => {
@@ -265,7 +258,7 @@ MESSAGE`)).toThrow(/RDF Messages are not enabled/);
   <http://example.org/a> <http://example.org/b> <http://example.org/c> .
 MESSAGE
   <http://example.org/d> <http://example.org/e> <http://example.org/f> .
-}`)).toThrow(/inside graph blocks/);
+}`)).toThrow(/inside graph blocks/u);
   });
 });
 
@@ -275,6 +268,6 @@ describe('RDF Messages parser output', () => {
 <http://example.org/s1> <http://example.org/p> <http://example.org/o1> .`) ?? [];
 
     expect(output.every(isMessageQuad)).toBe(true);
-    expect(toMessages(output).map(message => message.messageCounter)).toEqual([0]);
+    expect(toMessages(output).map(message => message.messageCounter)).toEqual([ 0 ]);
   });
 });
