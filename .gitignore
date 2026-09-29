@@ -4,3 +4,4 @@ coverage/
 *.log
 spec/earl-*.ttl
 .eslintcache
+dist
