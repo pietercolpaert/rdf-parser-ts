@@ -63,10 +63,6 @@ var Parser = class {
   constructor(options = {}) {
     this.options = options;
   }
-  /**
-   * Parses `input` and returns all quads, or `{ quad, messageCounter }` entries in RDF Messages mode.
-   * When a callback is passed, it is called once per quad, then once with `quad === null`, and nothing is returned.
-   */
   parse(input, callback) {
     try {
       const result = new CoreParser(input, this.options, {}).parse();
@@ -243,12 +239,15 @@ var IncrementalParser = class {
     this.options = options;
     this.callbacks = callbacks;
     this.parserState = createInitialCoreParserState(options);
+    const format = typeof options.format === "string" ? options.format.toLowerCase() : "";
+    this.lineFormat = format.includes("n-triples") || format.includes("n-quads");
   }
   options;
   callbacks;
   parserState;
   pending = "";
   atStart = true;
+  lineFormat;
   /** Adds a chunk of input and returns the output of all statements that are complete so far. */
   write(input) {
     this.appendInput(input);
@@ -270,8 +269,18 @@ var IncrementalParser = class {
     }
     this.pending += input;
   }
+  /**
+   * The end of the last complete statement in the pending input. In N-Triples and N-Quads a statement cannot span
+   * lines, so that is the last line break; the other formats need a scan that tracks strings, IRIs and nesting.
+   */
+  findCompleteEnd() {
+    if (this.lineFormat) {
+      return Math.max(this.pending.lastIndexOf("\n"), this.pending.lastIndexOf("\r")) + 1;
+    }
+    return findCompleteParseEnd(this.pending);
+  }
   parsePending(final) {
-    const end = final ? this.pending.length : findCompleteParseEnd(this.pending);
+    const end = final ? this.pending.length : this.findCompleteEnd();
     if (end <= 0 && !final) {
       return [];
     }
@@ -299,7 +308,7 @@ var StreamParser = class extends import_readable_stream.Transform {
       version,
       ...streamOptions
     } = options;
-    super({ ...streamOptions, readableObjectMode: true });
+    super({ decodeStrings: false, ...streamOptions, readableObjectMode: true });
     this.parser = new IncrementalParser(
       {
         baseIRI,
@@ -448,12 +457,12 @@ var CoreParser = class {
       return false;
     }
     i = this.skipHws(this.fastEnd);
-    const predicateEnd = this.readFastIriEnd(i);
-    if (predicateEnd < 0) {
+    const predicateValue = this.readFastIri(i);
+    if (predicateValue === null) {
       return false;
     }
-    const predicate = this.cachedNamedNode(this.input.slice(i + 1, predicateEnd));
-    i = this.skipHws(predicateEnd + 1);
+    const predicate = this.cachedNamedNode(predicateValue);
+    i = this.skipHws(this.fastEnd);
     const object = this.readFastObject(i);
     if (!object) {
       return false;
@@ -483,14 +492,10 @@ var CoreParser = class {
     const code = this.input.charCodeAt(index);
     if (code === 60) {
       if (this.input.charCodeAt(index + 1) === 60) {
-        return this.relax ? this.readFastTripleTerm(index) : null;
+        return this.readFastTripleTerm(index);
       }
-      const end = this.readFastIriEnd(index);
-      if (end < 0) {
-        return null;
-      }
-      this.fastEnd = end + 1;
-      return this.factory.namedNode(this.input.slice(index + 1, end));
+      const value = this.readFastIri(index);
+      return value === null ? null : this.factory.namedNode(value);
     }
     if (code === 95 && this.input.charCodeAt(index + 1) === 58) {
       return this.readFastBlankNode(index);
@@ -512,12 +517,12 @@ var CoreParser = class {
       return null;
     }
     i = this.skipHws(this.fastEnd);
-    const predicateEnd = this.readFastIriEnd(i);
-    if (predicateEnd < 0) {
+    const predicateValue = this.readFastIri(i);
+    if (predicateValue === null) {
       return null;
     }
-    const predicate = this.cachedNamedNode(this.input.slice(i + 1, predicateEnd));
-    i = this.skipHws(predicateEnd + 1);
+    const predicate = this.cachedNamedNode(predicateValue);
+    i = this.skipHws(this.fastEnd);
     const object = this.readFastObject(i);
     if (!object) {
       return null;
@@ -535,12 +540,10 @@ var CoreParser = class {
       if (this.input.charCodeAt(index + 1) === 60) {
         return null;
       }
-      const end = this.readFastIriEnd(index);
-      if (end < 0) {
+      const value = this.readFastIri(index);
+      if (value === null) {
         return null;
       }
-      this.fastEnd = end + 1;
-      const value = this.input.slice(index + 1, end);
       return cache ? this.cachedNamedNode(value) : this.factory.namedNode(value);
     }
     if (code === 95 && this.input.charCodeAt(index + 1) === 58) {
@@ -606,42 +609,33 @@ var CoreParser = class {
     }
     if (next === 94 && this.input.charCodeAt(i + 1) === 94) {
       i += 2;
-      const datatypeEnd = this.readFastIriEnd(i);
-      if (datatypeEnd < 0) {
+      const datatypeValue = this.readFastIri(i);
+      if (datatypeValue === null || !this.relax && (datatypeValue === RDF_LANG_STRING || datatypeValue === RDF_DIR_LANG_STRING)) {
         return null;
       }
-      const datatypeValue = this.input.slice(i + 1, datatypeEnd);
-      if (!this.relax && (datatypeValue === RDF_LANG_STRING || datatypeValue === RDF_DIR_LANG_STRING)) {
-        return null;
-      }
-      this.fastEnd = datatypeEnd + 1;
       return this.factory.literal(value, this.cachedNamedNode(datatypeValue));
     }
     this.fastEnd = i;
     return this.factory.literal(value);
   }
-  readFastIriEnd(index) {
+  /**
+   * Reads an absolute, escapeless IRI at `index` and returns its value, setting `fastEnd` after the `>`, or returns
+   * null so that the general parser handles it (and reports any error).
+   */
+  readFastIri(index) {
     if (this.input.charCodeAt(index) !== 60) {
-      return -1;
+      return null;
     }
     const end = this.input.indexOf(">", index + 1);
     if (end < 0) {
-      return -1;
+      return null;
     }
-    if (this.relax) {
-      return end;
+    const value = this.input.slice(index + 1, end);
+    if (!this.relax && (!hasScheme(value) || FAST_IRI_REJECT.test(value))) {
+      return null;
     }
-    let hasScheme2 = false;
-    for (let i = index + 1; i < end; i++) {
-      const code = this.input.charCodeAt(i);
-      if (code === 58 && i > index + 1) {
-        hasScheme2 = true;
-      }
-      if (code <= 32 || code === 34 || code === 60 || code === 92 || code === 94 || code === 96 || code === 123 || code === 124 || code === 125) {
-        return -1;
-      }
-    }
-    return hasScheme2 ? end : -1;
+    this.fastEnd = end + 1;
+    return value;
   }
   skipHws(index) {
     while (index < this.length) {
@@ -1119,9 +1113,11 @@ var CoreParser = class {
   parseIri() {
     this.expectChar(60, "Expected <");
     let value = "";
+    let runStart = this.index;
     while (this.index < this.length) {
-      const code = this.peekCharCode();
+      const code = this.input.charCodeAt(this.index);
       if (code === 62) {
+        value += this.input.slice(runStart, this.index);
         this.index++;
         if (!hasScheme(value)) {
           if (this.strictLineFormat) {
@@ -1134,6 +1130,7 @@ var CoreParser = class {
         return this.factory.namedNode(resolveIri(value, this.baseIRI));
       }
       if (code === 92) {
+        value += this.input.slice(runStart, this.index);
         this.index++;
         const escapeCode = this.peekCharCode();
         if (this.strictLineFormat && escapeCode !== 117 && escapeCode !== 85) {
@@ -1144,13 +1141,13 @@ var CoreParser = class {
           this.fail("Invalid character in IRI");
         }
         value += escaped;
+        runStart = this.index;
         continue;
       }
       if (isInvalidIriChar(code)) {
         this.fail("Invalid character in IRI");
       }
-      value += this.input[this.index];
-      this.advanceOne();
+      this.index++;
     }
     this.fail("Unterminated IRI");
   }
@@ -1303,29 +1300,30 @@ var CoreParser = class {
     }
     this.index += triple ? 3 : 1;
     let value = "";
+    let runStart = this.index;
     while (this.index < this.length) {
-      const code = this.peekCharCode();
-      if (code === quote) {
-        if (triple) {
-          if (this.input.charCodeAt(this.index + 1) === quote && this.input.charCodeAt(this.index + 2) === quote) {
-            this.index += 3;
-            return value;
-          }
-        } else {
-          this.index++;
-          return value;
-        }
+      const code = this.input.charCodeAt(this.index);
+      if (code === quote && (!triple || this.input.charCodeAt(this.index + 1) === quote && this.input.charCodeAt(this.index + 2) === quote)) {
+        value += this.input.slice(runStart, this.index);
+        this.index += triple ? 3 : 1;
+        return value;
       }
       if (code === 92) {
+        value += this.input.slice(runStart, this.index);
         this.index++;
         value += this.readEscape();
+        runStart = this.index;
         continue;
       }
-      if (!triple && (code === 10 || code === 13)) {
-        this.fail("Line breaks are not allowed in literals");
+      if (code === 10 || code === 13) {
+        if (!triple) {
+          this.fail("Line breaks are not allowed in literals");
+        }
+        if (code === 10) {
+          this.line++;
+        }
       }
-      value += this.input[this.index];
-      this.advanceOne();
+      this.index++;
     }
     this.fail("Unterminated literal");
   }
@@ -1506,9 +1504,22 @@ var CoreParser = class {
     throw error;
   }
 };
+var FAST_IRI_REJECT = /[\u0000-\u0020"<\\^`{|}]/u;
 var SUPPORTED_VERSIONS = /* @__PURE__ */ new Set(["1.1", "1.2", "1.2-basic"]);
 function hasScheme(iri) {
-  return /^[A-Za-z][\d+.A-Za-z-]*:/u.test(iri);
+  if (!isAsciiLetter(iri.charCodeAt(0))) {
+    return false;
+  }
+  for (let i = 1; i < iri.length; i++) {
+    const code = iri.charCodeAt(i);
+    if (code === 58) {
+      return true;
+    }
+    if (!(isAsciiLetter(code) || code >= 48 && code <= 57 || code === 43 || code === 45 || code === 46)) {
+      return false;
+    }
+  }
+  return false;
 }
 function hasColonInFirstSegment(iri) {
   const colon = iri.indexOf(":");

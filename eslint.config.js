@@ -24,8 +24,8 @@ module.exports = config([
     },
   },
   {
-    // Only the CLI and the tests are Node.js-specific.
-    files: [ 'src/bin/**/*.ts', 'test/**/*.ts' ],
+    // Only the tests are Node.js-specific.
+    files: [ 'test/**/*.ts' ],
     rules: {
       'import/no-nodejs-modules': 'off',
     },

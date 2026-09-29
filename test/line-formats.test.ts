@@ -1,7 +1,7 @@
 import type * as RDF from '@rdfjs/types';
 import { describe, expect, it } from 'vitest';
 import { Parser, type ParserOptions } from '../src';
-import { quadToString } from '../src/serialize';
+import { quadToString } from './serialize';
 
 const EX = 'http://example.org/';
 const RDF_LANG_STRING = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#langString';

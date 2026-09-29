@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Parser, isMessageQuad, toMessages, type Message } from '../src';
-import { quadToString } from '../src/serialize';
+import { quadToString } from './serialize';
 
 const SPEC_URL = 'https://w3c-cg.github.io/rsp/spec/messages-tests';
 const url = (fragment: string): string => `${SPEC_URL}#${fragment}`;

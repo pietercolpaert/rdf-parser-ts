@@ -64,7 +64,8 @@ declare class Parser {
      * Parses `input` and returns all quads, or `{ quad, messageCounter }` entries in RDF Messages mode.
      * When a callback is passed, it is called once per quad, then once with `quad === null`, and nothing is returned.
      */
-    parse(input: string, callback?: ParseCallback): ParserOutput | undefined;
+    parse(input: string): ParserOutput;
+    parse(input: string, callback: ParseCallback): undefined;
     /** Parses `input` in RDF Messages mode and groups the quads per message. */
     parseMessages(input: string): Message[];
 }
@@ -83,12 +84,18 @@ declare class IncrementalParser {
     private parserState;
     private pending;
     private atStart;
+    private readonly lineFormat;
     constructor(options?: ParserOptions, callbacks?: ParserEventCallbacks);
     /** Adds a chunk of input and returns the output of all statements that are complete so far. */
     write(input: string): ParserOutputItem[];
     /** Adds an optional last chunk, parses all remaining input and returns its output. */
     end(input?: string): ParserOutputItem[];
     private appendInput;
+    /**
+     * The end of the last complete statement in the pending input. In N-Triples and N-Quads a statement cannot span
+     * lines, so that is the last line break; the other formats need a scan that tracks strings, IRIs and nesting.
+     */
+    private findCompleteEnd;
     private parsePending;
 }
 /** Type guard for the `{ quad, messageCounter }` entries emitted in RDF Messages mode. */

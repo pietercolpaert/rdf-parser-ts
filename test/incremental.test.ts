@@ -4,7 +4,7 @@ import { DataFactory } from 'rdf-data-factory';
 import { describe, expect, it } from 'vitest';
 import { IncrementalParser, StreamParser, isMessageQuad, type ParserOutputItem } from '../src';
 import { StreamParser as BrowserStreamParser } from '../src/browser';
-import { quadToString } from '../src/serialize';
+import { quadToString } from './serialize';
 
 /** Throws a value that is not an `Error`, as a misbehaving data factory could. */
 function throwValue(value: unknown): never {
@@ -32,6 +32,22 @@ function counts(chunks: string[]): { counts: number[]; quads: string[] } {
 }
 
 describe('IncrementalParser', () => {
+  it('splits N-Triples and N-Quads input at the last line break', () => {
+    for (const format of [ 'application/n-triples', 'application/n-quads' ]) {
+      const parser = new IncrementalParser({ format });
+      const quad = '<http://ex.org/s> <http://ex.org/p> "a.b" .';
+      expect(parser.write(quad.slice(0, 30))).toEqual([]);
+      expect(parser.write(`${quad.slice(30)}\n${quad.slice(0, 20)}`)).toHaveLength(1);
+      expect(parser.write(`${quad.slice(20)}\r`)).toHaveLength(1);
+      expect(parser.end()).toEqual([]);
+    }
+  });
+
+  it('ignores a format that is not a string', () => {
+    const parser = new IncrementalParser({ format: <string><unknown>1 });
+    expect(parser.write('<http://ex.org/s> <http://ex.org/p> <http://ex.org/o> .\n')).toHaveLength(1);
+  });
+
   it('strips a byte order mark from the first chunk only', () => {
     const parser = new IncrementalParser({ baseIRI: EX });
     expect(parser.write('')).toEqual([]);

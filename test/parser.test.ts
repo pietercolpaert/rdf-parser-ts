@@ -4,7 +4,7 @@ import { DataFactory } from 'rdf-data-factory';
 import { describe, expect, it } from 'vitest';
 import { Parser, StreamParser, isMessageQuad, type MessageQuad } from '../src';
 import { StreamParser as BrowserStreamParser } from '../src/browser';
-import { quadToString, termToString } from '../src/serialize';
+import { quadToString, termToString } from './serialize';
 
 function ids(input: string, baseIRI = 'http://example.org/'): string[] {
   return (<RDF.BaseQuad[]>(new Parser({ baseIRI }).parse(input) ?? [])).map(quadToString);

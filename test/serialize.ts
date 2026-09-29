@@ -3,8 +3,8 @@ import type * as RDF from '@rdfjs/types';
 const XSD_STRING = 'http://www.w3.org/2001/XMLSchema#string';
 
 /**
- * Minimal N-Quads serialization used by the CLI and the tests. It is deliberately not part of the
- * public API: use a dedicated writer such as rdf-writer-ts for serializing RDF.
+ * Minimal N-Quads serialization, used by the tests to compare parser output. It is not part of the package:
+ * use a dedicated writer such as rdf-writer-ts for serializing RDF.
  */
 export function quadToString(quad: RDF.BaseQuad): string {
   const graph = quad.graph.termType === 'DefaultGraph' ? '' : ` ${termToString(quad.graph)}`;

@@ -2,7 +2,7 @@ import type * as RDF from '@rdfjs/types';
 import { DataFactory } from 'rdf-data-factory';
 import { describe, expect, it } from 'vitest';
 import { Message, isMessageQuad, toMessages, type MessageQuad, type ParserOutputItem } from '../src';
-import { quadToString, termToString } from '../src/serialize';
+import { quadToString, termToString } from './serialize';
 
 const DF = new DataFactory();
 const namedNode = (value: string): RDF.NamedNode => DF.namedNode(value);

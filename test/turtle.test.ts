@@ -2,7 +2,7 @@ import type * as RDF from '@rdfjs/types';
 import { DataFactory } from 'rdf-data-factory';
 import { describe, expect, it } from 'vitest';
 import { Parser, type MessageQuad, type ParserOptions } from '../src';
-import { quadToString } from '../src/serialize';
+import { quadToString } from './serialize';
 
 /** Throws a value that is not an `Error`, as a misbehaving data factory could. */
 function throwValue(value: unknown): never {
@@ -235,5 +235,13 @@ describe('Parser callbacks', () => {
     expect(errors[0]).toBeInstanceOf(Error);
     expect(errors[0]!.message).toBe('factory failure');
     expect(() => new Parser({ factory }).parse('<http://s> <http://p> <http://o> .')).toThrow();
+  });
+});
+
+describe('Long strings', () => {
+  it('keeps line breaks and counts lines for error messages', () => {
+    const quads = <RDF.BaseQuad[]> new Parser().parse('<http://ex.org/s> <http://ex.org/p> """a\r\nb\rc""" .');
+    expect(quads[0]!.object.value).toBe('a\r\nb\rc');
+    expect(() => new Parser().parse('<http://ex.org/s> <http://ex.org/p> """a\nb\nc""" "g" .')).toThrow(/on line 3\./u);
   });
 });

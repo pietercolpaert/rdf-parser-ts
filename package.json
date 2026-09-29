@@ -40,9 +40,6 @@
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "browser": "./dist/browser/index.mjs",
-  "bin": {
-    "rdf-parser-ts": "./dist/bin/rdf-parser.js"
-  },
   "directories": {
     "test": "test"
   },
@@ -58,7 +55,7 @@
   "scripts": {
     "clean": "rm -rf dist coverage .rdf-test-suite-cache",
     "build": "npm run build:node && npm run build:browser",
-    "build:node": "tsup src/index.ts src/bin/rdf-parser.ts --format cjs,esm --dts --target node24 --platform node --clean --splitting false --out-dir dist",
+    "build:node": "tsup src/index.ts --format cjs,esm --dts --target node24 --platform node --clean --splitting false --out-dir dist",
     "build:browser": "node scripts/build-browser.cjs",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -106,19 +103,18 @@
   "devDependencies": {
     "@graphy/content.nq.read": "^4.3.7",
     "@rubensworks/eslint-config": "^3.1.0",
-    "@types/node": "^24.0.0",
-    "@types/readable-stream": "^4.0.24",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@types/node": "^26.6.3",
+    "@types/readable-stream": "^4.0.25",
+    "@vitest/coverage-v8": "^5.0.2",
     "arrayify-stream": "^3.0.0",
-    "esbuild": "^0.27.7",
+    "esbuild": "^0.28.2",
     "eslint": "^8.57.1",
-    "eyeling": "^1.28.3",
-    "n3": "^2.1.1",
+    "n3": "^2.7.12",
     "rdf-isomorphic": "^2.0.1",
-    "rdf-test-suite": "^2.1.4",
+    "rdf-test-suite": "^2.9.0",
     "streamify-string": "^1.0.1",
-    "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
-    "vitest": "^4.1.8"
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.2"
   }
 }

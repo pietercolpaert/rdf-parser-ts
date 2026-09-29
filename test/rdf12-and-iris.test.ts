@@ -1,7 +1,7 @@
 import type * as RDF from '@rdfjs/types';
 import { describe, expect, it } from 'vitest';
 import { Parser } from '../src';
-import { quadToString } from '../src/serialize';
+import { quadToString } from './serialize';
 
 const REIFIES = '<http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies>';
 

@@ -4,7 +4,7 @@ import { DataFactory } from 'rdf-data-factory';
 import { isomorphic } from 'rdf-isomorphic';
 import { describe, expect, it } from 'vitest';
 import { IncrementalParser, Parser, type ParserOptions } from '../src';
-import { quadToString } from '../src/serialize';
+import { quadToString } from './serialize';
 
 /**
  * Replays the declarative parser tests of N3.js (extracted by scripts/extract-n3-parser-tests.cjs).
