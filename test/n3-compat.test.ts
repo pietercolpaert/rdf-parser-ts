@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import type * as RDF from '@rdfjs/types';
+import { DataFactory } from 'rdf-data-factory';
 import { isomorphic } from 'rdf-isomorphic';
 import { describe, expect, it } from 'vitest';
-import { DataFactory, IncrementalParser, Parser, type ParserOptions } from '../src';
+import { IncrementalParser, Parser, type ParserOptions } from '../src';
 import { quadToString } from '../src/serialize';
 
 /**
@@ -74,25 +75,27 @@ const CORRECTIONS: Record<string, (testCase: N3Case) => void> = {
     },
 };
 
+const DF = new DataFactory<RDF.BaseQuad>();
+
 function toTerm(term: JsonTerm): RDF.Term {
   switch (term.termType) {
     case 'NamedNode':
-      return DataFactory.namedNode(term.value!);
+      return DF.namedNode(term.value!);
     case 'BlankNode':
-      return DataFactory.blankNode(term.value);
+      return DF.blankNode(term.value);
     case 'Variable':
-      return DataFactory.variable(term.value!);
+      return DF.variable(term.value!);
     case 'DefaultGraph':
-      return DataFactory.defaultGraph();
+      return DF.defaultGraph();
     case 'Literal':
       if (term.language) {
         return term.direction ?
-          DataFactory.literal(term.value!, { language: term.language, direction: <'ltr' | 'rtl'>term.direction }) :
-          DataFactory.literal(term.value!, term.language);
+          DF.literal(term.value!, { language: term.language, direction: <'ltr' | 'rtl'>term.direction }) :
+          DF.literal(term.value!, term.language);
       }
-      return DataFactory.literal(term.value!, DataFactory.namedNode(term.datatype!));
+      return DF.literal(term.value!, DF.namedNode(term.datatype!));
     default:
-      return DataFactory.quad(
+      return DF.quad(
         toTerm(term.subject!),
         toTerm(term.predicate!),
         toTerm(term.object!),
@@ -111,7 +114,7 @@ function run(testCase: N3Case): void {
     case 'parseWithComments': {
       const actual = parse(testCase);
       const expected = testCase.expected!.map(([ s, p, o, g ]) =>
-        DataFactory.quad(toTerm(s!), toTerm(p!), toTerm(o!), toTerm(g!)));
+        DF.quad(toTerm(s!), toTerm(p!), toTerm(o!), toTerm(g!)));
       if (!isomorphic(<RDF.Quad[]>actual, <RDF.Quad[]>expected)) {
         expect(actual.map(quadToString).sort()).toEqual(expected.map(quadToString).sort());
         throw new Error('Graphs are not isomorphic');

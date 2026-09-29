@@ -1,6 +1,7 @@
 import type * as RDF from '@rdfjs/types';
+import { DataFactory } from 'rdf-data-factory';
 import { describe, expect, it } from 'vitest';
-import { DataFactory, Parser, type MessageQuad, type ParserOptions } from '../src';
+import { Parser, type MessageQuad, type ParserOptions } from '../src';
 import { quadToString } from '../src/serialize';
 
 /** Throws a value that is not an `Error`, as a misbehaving data factory could. */
@@ -226,10 +227,9 @@ describe('Parser callbacks', () => {
   });
 
   it('wraps non-Error exceptions thrown by the data factory', () => {
-    const factory = {
-      ...DataFactory,
+    const factory = Object.assign(new DataFactory(), {
       namedNode: (): never => throwValue('factory failure'),
-    };
+    });
     const errors: Error[] = [];
     new Parser({ factory }).parse('<http://s> <http://p> <http://o> .', error => errors.push(error!));
     expect(errors[0]).toBeInstanceOf(Error);

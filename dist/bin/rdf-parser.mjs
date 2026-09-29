@@ -8,48 +8,8 @@ var __commonJS = (cb, mod) => function __require() {
 };
 
 // src/index.ts
+import { DataFactory } from "rdf-data-factory";
 import { Transform } from "readable-stream";
-function sameTerm(a, b) {
-  if (!b || a.termType !== b.termType || a.value !== b.value) {
-    return false;
-  }
-  if (a.termType === "Literal" && b.termType === "Literal") {
-    return a.language === b.language && a.direction === b.direction && a.datatype.equals(b.datatype);
-  }
-  if (a.termType === "Quad" && b.termType === "Quad") {
-    return a.subject.equals(b.subject) && a.predicate.equals(b.predicate) && a.object.equals(b.object) && a.graph.equals(b.graph);
-  }
-  return true;
-}
-function isDirectionalLanguage(value) {
-  return Boolean(value && typeof value === "object" && "language" in value && !("termType" in value));
-}
-function fromTerm(original) {
-  switch (original.termType) {
-    case "NamedNode":
-      return new NamedNode(original.value);
-    case "BlankNode":
-      return new BlankNode(original.value);
-    case "Variable":
-      return new Variable(original.value);
-    case "DefaultGraph":
-      return defaultGraphSingleton;
-    case "Literal":
-      return new Literal(
-        original.value,
-        original.language,
-        fromTerm(original.datatype),
-        original.direction ?? void 0
-      );
-    case "Quad":
-      return new Quad(
-        fromTerm(original.subject),
-        fromTerm(original.predicate),
-        fromTerm(original.object),
-        fromTerm(original.graph)
-      );
-  }
-}
 function scanCommentEnd(input, index) {
   for (let i = index + 1; i < input.length; i++) {
     const code = input.charCodeAt(i);
@@ -254,7 +214,7 @@ function getMessageCount(output) {
   const value = output.messageCount;
   return typeof value === "number" ? value : void 0;
 }
-var XSD, RDF_NS, RDF_TYPE, RDF_REIFIES, RDF_FIRST, RDF_REST, RDF_NIL, RDF_LANG_STRING, RDF_DIR_LANG_STRING, XSD_STRING, XSD_INTEGER, XSD_DECIMAL, XSD_DOUBLE, XSD_BOOLEAN, NamedNode, BlankNode, Variable, DefaultGraph, Literal, Quad, Message, defaultGraphSingleton, globalBlankNodeCounter, DataFactory, Parser, CoreParser, SUPPORTED_VERSIONS, lastBase, NAME_PREFIX, NAME_LOCAL, NAME_BLANK_NODE_LABEL, LOCAL_NAME_ESCAPES, namedNode, blankNode, literal, variable, defaultGraph, quad;
+var XSD, RDF_NS, RDF_TYPE, RDF_REIFIES, RDF_FIRST, RDF_REST, RDF_NIL, RDF_LANG_STRING, RDF_DIR_LANG_STRING, XSD_INTEGER, XSD_DECIMAL, XSD_DOUBLE, XSD_BOOLEAN, Message, defaultFactory, Parser, CoreParser, SUPPORTED_VERSIONS, lastBase, NAME_PREFIX, NAME_LOCAL, NAME_BLANK_NODE_LABEL, LOCAL_NAME_ESCAPES;
 var init_index = __esm({
   "src/index.ts"() {
     "use strict";
@@ -267,90 +227,17 @@ var init_index = __esm({
     RDF_NIL = `${RDF_NS}nil`;
     RDF_LANG_STRING = `${RDF_NS}langString`;
     RDF_DIR_LANG_STRING = `${RDF_NS}dirLangString`;
-    XSD_STRING = `${XSD}string`;
     XSD_INTEGER = `${XSD}integer`;
     XSD_DECIMAL = `${XSD}decimal`;
     XSD_DOUBLE = `${XSD}double`;
     XSD_BOOLEAN = `${XSD}boolean`;
-    NamedNode = class {
-      constructor(value) {
-        this.value = value;
-      }
-      value;
-      termType = "NamedNode";
-      equals(other) {
-        return sameTerm(this, other);
-      }
-    };
-    BlankNode = class {
-      constructor(value) {
-        this.value = value;
-      }
-      value;
-      termType = "BlankNode";
-      equals(other) {
-        return sameTerm(this, other);
-      }
-    };
-    Variable = class {
-      constructor(value) {
-        this.value = value;
-      }
-      value;
-      termType = "Variable";
-      equals(other) {
-        return sameTerm(this, other);
-      }
-    };
-    DefaultGraph = class {
-      termType = "DefaultGraph";
-      value = "";
-      equals(other) {
-        return sameTerm(this, other);
-      }
-    };
-    Literal = class {
-      constructor(value, language = "", datatype = new NamedNode(language ? RDF_LANG_STRING : XSD_STRING), direction) {
-        this.value = value;
-        this.language = language;
-        this.datatype = datatype;
-        if (direction) {
-          this.direction = direction;
-        }
-      }
-      value;
-      language;
-      datatype;
-      termType = "Literal";
-      direction;
-      equals(other) {
-        return sameTerm(this, other);
-      }
-    };
-    Quad = class {
-      constructor(subject, predicate, object, graph = defaultGraphSingleton) {
-        this.subject = subject;
-        this.predicate = predicate;
-        this.object = object;
-        this.graph = graph;
-      }
-      subject;
-      predicate;
-      object;
-      graph;
-      termType = "Quad";
-      value = "";
-      equals(other) {
-        return sameTerm(this, other);
-      }
-    };
     Message = class _Message extends Array {
       constructor(messageCounter, quads = []) {
         super();
         this.messageCounter = messageCounter;
         Object.setPrototypeOf(this, _Message.prototype);
-        for (const quad2 of quads) {
-          this.push(quad2);
+        for (const quad of quads) {
+          this.push(quad);
         }
       }
       messageCounter;
@@ -358,33 +245,7 @@ var init_index = __esm({
         return Array;
       }
     };
-    defaultGraphSingleton = new DefaultGraph();
-    globalBlankNodeCounter = 0;
-    DataFactory = {
-      namedNode: (value) => new NamedNode(value),
-      blankNode: (value) => new BlankNode(value ?? `b${globalBlankNodeCounter++}`),
-      literal: (value, languageOrDatatype) => {
-        if (typeof languageOrDatatype === "string") {
-          const language = languageOrDatatype.toLowerCase();
-          return new Literal(value, language, new NamedNode(language ? RDF_LANG_STRING : XSD_STRING));
-        }
-        if (isDirectionalLanguage(languageOrDatatype)) {
-          const direction = languageOrDatatype.direction ?? void 0;
-          return new Literal(
-            value,
-            languageOrDatatype.language.toLowerCase(),
-            new NamedNode(direction ? RDF_DIR_LANG_STRING : RDF_LANG_STRING),
-            direction
-          );
-        }
-        return new Literal(value, "", languageOrDatatype ?? new NamedNode(XSD_STRING));
-      },
-      variable: (value) => new Variable(value),
-      defaultGraph: () => defaultGraphSingleton,
-      quad: (subject, predicate, object, graph = defaultGraphSingleton) => new Quad(subject, predicate, object, graph),
-      fromTerm,
-      fromQuad: (original) => fromTerm(original)
-    };
+    defaultFactory = new DataFactory();
     Parser = class {
       options;
       constructor(options = {}) {
@@ -403,8 +264,8 @@ var init_index = __esm({
                 callback(null, entry.quad, result.prefixes, entry.messageCounter);
               }
             } else {
-              for (const quad2 of result.quads) {
-                callback(null, quad2, result.prefixes);
+              for (const quad of result.quads) {
+                callback(null, quad, result.prefixes);
               }
             }
             callback(null, null, result.prefixes);
@@ -459,7 +320,7 @@ var init_index = __esm({
       constructor(input, options, callbacks, state) {
         this.input = state ? input : input.charCodeAt(0) === 65279 ? input.slice(1) : input;
         this.length = this.input.length;
-        this.factory = options.factory ?? DataFactory;
+        this.factory = options.factory ?? defaultFactory;
         this.prefixes = state?.prefixes ?? /* @__PURE__ */ Object.create(null);
         this.baseIRI = state?.baseIRI ?? options.baseIRI ?? options.baseIRIPath ?? "";
         this.callbacks = callbacks;
@@ -740,9 +601,9 @@ var init_index = __esm({
         }
         return node;
       }
-      parseStatement(defaultGraph2, allowGraphCloseTerminator = false, insideGraphBlock = false) {
+      parseStatement(defaultGraph, allowGraphCloseTerminator = false, insideGraphBlock = false) {
         this.skipWsAndComments();
-        if (this.parseDirective(defaultGraph2)) {
+        if (this.parseDirective(defaultGraph)) {
           if (insideGraphBlock) {
             this.fail("Directives are not allowed inside graph blocks");
           }
@@ -751,7 +612,7 @@ var init_index = __esm({
         if (this.peekCharCode() === 123) {
           this.assertGraphBlockAllowed(insideGraphBlock);
           this.index++;
-          this.parseGraphStatements(defaultGraph2);
+          this.parseGraphStatements(defaultGraph);
           return false;
         }
         if (this.allowGraphs && this.matchWord("GRAPH")) {
@@ -759,14 +620,14 @@ var init_index = __esm({
             this.fail("Graph blocks are not allowed inside graph blocks");
           }
           this.skipWsAndComments();
-          const graph = this.parseGraphLabel(defaultGraph2);
+          const graph = this.parseGraphLabel(defaultGraph);
           this.skipWsAndComments();
           this.expectChar(123, "Expected { after GRAPH label");
           this.parseGraphStatements(graph);
           return false;
         }
         const termStart = this.index;
-        const subjectOrGraph = this.parseSubject(defaultGraph2);
+        const subjectOrGraph = this.parseSubject(defaultGraph);
         const termEnd = this.index;
         this.skipWsAndComments();
         if (this.peekCharCode() === 123) {
@@ -785,7 +646,7 @@ var init_index = __esm({
             return true;
           }
         }
-        return this.parsePredicateObjectList(subjectOrGraph, defaultGraph2, 46, allowGraphCloseTerminator);
+        return this.parsePredicateObjectList(subjectOrGraph, defaultGraph, 46, allowGraphCloseTerminator);
       }
       assertGraphBlockAllowed(insideGraphBlock) {
         if (insideGraphBlock) {
@@ -908,10 +769,10 @@ var init_index = __esm({
         }
       }
       addQuad(subject, predicate, object, graph) {
-        const quad2 = this.factory.quad(subject, predicate, object, graph);
-        this.quads.push(quad2);
+        const quad = this.factory.quad(subject, predicate, object, graph);
+        this.quads.push(quad);
         if (this.messagesEnabled) {
-          this.messageQuads.push({ quad: quad2, messageCounter: this.messageCounter });
+          this.messageQuads.push({ quad, messageCounter: this.messageCounter });
           this.messageCountHint = Math.max(this.messageCountHint, this.messageCounter + 1);
           this.afterMessageDelimiter = false;
         }
@@ -1587,19 +1448,13 @@ var init_index = __esm({
     NAME_LOCAL = 1;
     NAME_BLANK_NODE_LABEL = 2;
     LOCAL_NAME_ESCAPES = new Set("_~.-!$&'()*+,;=/?#@%");
-    namedNode = DataFactory.namedNode;
-    blankNode = DataFactory.blankNode;
-    literal = DataFactory.literal;
-    variable = DataFactory.variable;
-    defaultGraph = DataFactory.defaultGraph;
-    quad = DataFactory.quad;
   }
 });
 
 // src/serialize.ts
-function quadToString(quad2) {
-  const graph = quad2.graph.termType === "DefaultGraph" ? "" : ` ${termToString(quad2.graph)}`;
-  return `${termToString(quad2.subject)} ${termToString(quad2.predicate)} ${termToString(quad2.object)}${graph} .`;
+function quadToString(quad) {
+  const graph = quad.graph.termType === "DefaultGraph" ? "" : ` ${termToString(quad.graph)}`;
+  return `${termToString(quad.subject)} ${termToString(quad.predicate)} ${termToString(quad.object)}${graph} .`;
 }
 function termToString(term) {
   switch (term.termType) {
@@ -1616,7 +1471,7 @@ function termToString(term) {
       if (term.language) {
         return `${quoted}@${term.direction ? `${term.language}--${term.direction}` : term.language}`;
       }
-      if (term.datatype.value === XSD_STRING2) {
+      if (term.datatype.value === XSD_STRING) {
         return quoted;
       }
       return `${quoted}^^<${term.datatype.value}>`;
@@ -1628,11 +1483,11 @@ function termToString(term) {
 function escapeString(value) {
   return value.replaceAll(/[\\"\n\r\t\b\f]/gu, (character) => ESCAPES[character]);
 }
-var XSD_STRING2, ESCAPES;
+var XSD_STRING, ESCAPES;
 var init_serialize = __esm({
   "src/serialize.ts"() {
     "use strict";
-    XSD_STRING2 = "http://www.w3.org/2001/XMLSchema#string";
+    XSD_STRING = "http://www.w3.org/2001/XMLSchema#string";
     ESCAPES = {
       "\\": "\\\\",
       '"': '\\"',
@@ -1714,8 +1569,8 @@ Options:
       let i = 0;
       for (const item of quads) {
         if (!silent) {
-          const quad2 = isMessageQuad(item) ? item.quad : item;
-          process.stdout.write(`${quadToString(quad2)}
+          const quad = isMessageQuad(item) ? item.quad : item;
+          process.stdout.write(`${quadToString(quad)}
 `);
         }
         i++;

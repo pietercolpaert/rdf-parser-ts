@@ -10,7 +10,7 @@ interface ParserOptions {
      * N-Triples and N-Quads enable strict line-based validation; without a hint, Turtle/TriG syntax is accepted.
      */
     format?: string;
-    /** RDF/JS data factory used to create terms and quads. Defaults to {@link DataFactory}. */
+    /** RDF/JS data factory used to create terms and quads. Defaults to the `DataFactory` of rdf-data-factory. */
     factory?: RDF.DataFactory<RDF.BaseQuad>;
     /** Emit comment events in streaming mode. */
     comments?: boolean;
@@ -42,76 +42,15 @@ interface ParserEventCallbacks {
     prefix?: (prefix: string, iri: RDF.NamedNode) => void;
     comment?: (comment: string) => void;
 }
-type LiteralDirection = RDF.DirectionalLanguage['direction'];
-declare class NamedNode<Iri extends string = string> implements RDF.NamedNode<Iri> {
-    readonly value: Iri;
-    readonly termType: "NamedNode";
-    constructor(value: Iri);
-    equals(other?: RDF.Term | null): boolean;
-}
-declare class BlankNode implements RDF.BlankNode {
-    readonly value: string;
-    readonly termType: "BlankNode";
-    constructor(value: string);
-    equals(other?: RDF.Term | null): boolean;
-}
-declare class Variable implements RDF.Variable {
-    readonly value: string;
-    readonly termType: "Variable";
-    constructor(value: string);
-    equals(other?: RDF.Term | null): boolean;
-}
-declare class DefaultGraph implements RDF.DefaultGraph {
-    readonly termType: "DefaultGraph";
-    readonly value: "";
-    equals(other?: RDF.Term | null): boolean;
-}
-declare class Literal implements RDF.Literal {
-    readonly value: string;
-    readonly language: string;
-    readonly datatype: RDF.NamedNode;
-    readonly termType: "Literal";
-    readonly direction?: LiteralDirection;
-    constructor(value: string, language?: string, datatype?: RDF.NamedNode, direction?: LiteralDirection);
-    equals(other?: RDF.Term | null): boolean;
-}
-declare class Quad implements RDF.BaseQuad {
-    readonly subject: RDF.Term;
-    readonly predicate: RDF.Term;
-    readonly object: RDF.Term;
-    readonly graph: RDF.Term;
-    readonly termType: "Quad";
-    readonly value: "";
-    constructor(subject: RDF.Term, predicate: RDF.Term, object: RDF.Term, graph?: RDF.Term);
-    equals(other?: RDF.Term | null): boolean;
-}
 /**
  * The quads of a single RDF Message. RDF/JS has no notion of messages, so this is the one
- * data model class that goes beyond the RDF/JS interfaces.
+ * data model class this package adds to the RDF/JS interfaces.
  */
 declare class Message extends Array<RDF.BaseQuad> {
     readonly messageCounter: number;
     static get [Symbol.species](): ArrayConstructor;
     constructor(messageCounter: number, quads?: Iterable<RDF.BaseQuad>);
 }
-declare function fromTerm(original: RDF.NamedNode): NamedNode;
-declare function fromTerm(original: RDF.BlankNode): BlankNode;
-declare function fromTerm(original: RDF.Literal): Literal;
-declare function fromTerm(original: RDF.Variable): Variable;
-declare function fromTerm(original: RDF.DefaultGraph): DefaultGraph;
-declare function fromTerm(original: RDF.BaseQuad): Quad;
-declare function fromTerm(original: RDF.Term): RDF.Term;
-/** The default RDF/JS data factory. */
-declare const DataFactory: {
-    namedNode: <Iri extends string = string>(value: Iri) => NamedNode<Iri>;
-    blankNode: (value?: string) => BlankNode;
-    literal: (value: string, languageOrDatatype?: string | RDF.NamedNode | RDF.DirectionalLanguage) => Literal;
-    variable: (value: string) => Variable;
-    defaultGraph: () => DefaultGraph;
-    quad: (subject: RDF.Term, predicate: RDF.Term, object: RDF.Term, graph?: RDF.Term) => Quad;
-    fromTerm: typeof fromTerm;
-    fromQuad: (original: RDF.BaseQuad) => Quad;
-};
 /**
  * Parses a complete Turtle, TriG, N-Triples or N-Quads document held in memory.
  *
@@ -159,12 +98,6 @@ declare function isMessageQuad(value: unknown): value is MessageQuad;
  * Plain quads are all assigned to message 0.
  */
 declare function toMessages(output: Iterable<ParserOutputItem>, messageCount?: number): Message[];
-declare const namedNode: <Iri extends string = string>(value: Iri) => NamedNode<Iri>;
-declare const blankNode: (value?: string) => BlankNode;
-declare const literal: (value: string, languageOrDatatype?: string | RDF.NamedNode | RDF.DirectionalLanguage) => Literal;
-declare const variable: (value: string) => Variable;
-declare const defaultGraph: () => DefaultGraph;
-declare const quad: (subject: RDF.Term, predicate: RDF.Term, object: RDF.Term, graph?: RDF.Term) => Quad;
 
 type BrowserStreamChunk = string | Uint8Array | ArrayBuffer;
 type BrowserStreamEvent = 'prefix' | 'comment' | 'messageCounter';
@@ -189,4 +122,4 @@ declare class StreamParser {
     private emit;
 }
 
-export { BlankNode, DataFactory, DefaultGraph, IncrementalParser, Literal, Message, type MessageQuad, type MessageQuadArray, NamedNode, type ParseCallback, Parser, type ParserEventCallbacks, type ParserOptions, type ParserOutput, type ParserOutputItem, Quad, StreamParser, type StreamParserOptions, Variable, blankNode, defaultGraph, isMessageQuad, literal, namedNode, quad, toMessages, variable };
+export { IncrementalParser, Message, type MessageQuad, type MessageQuadArray, type ParseCallback, Parser, type ParserEventCallbacks, type ParserOptions, type ParserOutput, type ParserOutputItem, StreamParser, type StreamParserOptions, isMessageQuad, toMessages };

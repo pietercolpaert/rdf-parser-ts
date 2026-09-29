@@ -5,6 +5,7 @@
 var import_node_fs = require("fs");
 
 // src/index.ts
+var import_rdf_data_factory = require("rdf-data-factory");
 var import_readable_stream = require("readable-stream");
 var XSD = "http://www.w3.org/2001/XMLSchema#";
 var RDF_NS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
@@ -15,102 +16,17 @@ var RDF_REST = `${RDF_NS}rest`;
 var RDF_NIL = `${RDF_NS}nil`;
 var RDF_LANG_STRING = `${RDF_NS}langString`;
 var RDF_DIR_LANG_STRING = `${RDF_NS}dirLangString`;
-var XSD_STRING = `${XSD}string`;
 var XSD_INTEGER = `${XSD}integer`;
 var XSD_DECIMAL = `${XSD}decimal`;
 var XSD_DOUBLE = `${XSD}double`;
 var XSD_BOOLEAN = `${XSD}boolean`;
-function sameTerm(a, b) {
-  if (!b || a.termType !== b.termType || a.value !== b.value) {
-    return false;
-  }
-  if (a.termType === "Literal" && b.termType === "Literal") {
-    return a.language === b.language && a.direction === b.direction && a.datatype.equals(b.datatype);
-  }
-  if (a.termType === "Quad" && b.termType === "Quad") {
-    return a.subject.equals(b.subject) && a.predicate.equals(b.predicate) && a.object.equals(b.object) && a.graph.equals(b.graph);
-  }
-  return true;
-}
-var NamedNode = class {
-  constructor(value) {
-    this.value = value;
-  }
-  value;
-  termType = "NamedNode";
-  equals(other) {
-    return sameTerm(this, other);
-  }
-};
-var BlankNode = class {
-  constructor(value) {
-    this.value = value;
-  }
-  value;
-  termType = "BlankNode";
-  equals(other) {
-    return sameTerm(this, other);
-  }
-};
-var Variable = class {
-  constructor(value) {
-    this.value = value;
-  }
-  value;
-  termType = "Variable";
-  equals(other) {
-    return sameTerm(this, other);
-  }
-};
-var DefaultGraph = class {
-  termType = "DefaultGraph";
-  value = "";
-  equals(other) {
-    return sameTerm(this, other);
-  }
-};
-var Literal = class {
-  constructor(value, language = "", datatype = new NamedNode(language ? RDF_LANG_STRING : XSD_STRING), direction) {
-    this.value = value;
-    this.language = language;
-    this.datatype = datatype;
-    if (direction) {
-      this.direction = direction;
-    }
-  }
-  value;
-  language;
-  datatype;
-  termType = "Literal";
-  direction;
-  equals(other) {
-    return sameTerm(this, other);
-  }
-};
-var Quad = class {
-  constructor(subject, predicate, object, graph = defaultGraphSingleton) {
-    this.subject = subject;
-    this.predicate = predicate;
-    this.object = object;
-    this.graph = graph;
-  }
-  subject;
-  predicate;
-  object;
-  graph;
-  termType = "Quad";
-  value = "";
-  equals(other) {
-    return sameTerm(this, other);
-  }
-};
 var Message = class _Message extends Array {
   constructor(messageCounter, quads = []) {
     super();
     this.messageCounter = messageCounter;
     Object.setPrototypeOf(this, _Message.prototype);
-    for (const quad2 of quads) {
-      this.push(quad2);
+    for (const quad of quads) {
+      this.push(quad);
     }
   }
   messageCounter;
@@ -118,62 +34,7 @@ var Message = class _Message extends Array {
     return Array;
   }
 };
-var defaultGraphSingleton = new DefaultGraph();
-var globalBlankNodeCounter = 0;
-function isDirectionalLanguage(value) {
-  return Boolean(value && typeof value === "object" && "language" in value && !("termType" in value));
-}
-function fromTerm(original) {
-  switch (original.termType) {
-    case "NamedNode":
-      return new NamedNode(original.value);
-    case "BlankNode":
-      return new BlankNode(original.value);
-    case "Variable":
-      return new Variable(original.value);
-    case "DefaultGraph":
-      return defaultGraphSingleton;
-    case "Literal":
-      return new Literal(
-        original.value,
-        original.language,
-        fromTerm(original.datatype),
-        original.direction ?? void 0
-      );
-    case "Quad":
-      return new Quad(
-        fromTerm(original.subject),
-        fromTerm(original.predicate),
-        fromTerm(original.object),
-        fromTerm(original.graph)
-      );
-  }
-}
-var DataFactory = {
-  namedNode: (value) => new NamedNode(value),
-  blankNode: (value) => new BlankNode(value ?? `b${globalBlankNodeCounter++}`),
-  literal: (value, languageOrDatatype) => {
-    if (typeof languageOrDatatype === "string") {
-      const language = languageOrDatatype.toLowerCase();
-      return new Literal(value, language, new NamedNode(language ? RDF_LANG_STRING : XSD_STRING));
-    }
-    if (isDirectionalLanguage(languageOrDatatype)) {
-      const direction = languageOrDatatype.direction ?? void 0;
-      return new Literal(
-        value,
-        languageOrDatatype.language.toLowerCase(),
-        new NamedNode(direction ? RDF_DIR_LANG_STRING : RDF_LANG_STRING),
-        direction
-      );
-    }
-    return new Literal(value, "", languageOrDatatype ?? new NamedNode(XSD_STRING));
-  },
-  variable: (value) => new Variable(value),
-  defaultGraph: () => defaultGraphSingleton,
-  quad: (subject, predicate, object, graph = defaultGraphSingleton) => new Quad(subject, predicate, object, graph),
-  fromTerm,
-  fromQuad: (original) => fromTerm(original)
-};
+var defaultFactory = new import_rdf_data_factory.DataFactory();
 var Parser = class {
   options;
   constructor(options = {}) {
@@ -192,8 +53,8 @@ var Parser = class {
             callback(null, entry.quad, result.prefixes, entry.messageCounter);
           }
         } else {
-          for (const quad2 of result.quads) {
-            callback(null, quad2, result.prefixes);
+          for (const quad of result.quads) {
+            callback(null, quad, result.prefixes);
           }
         }
         callback(null, null, result.prefixes);
@@ -280,7 +141,7 @@ var CoreParser = class {
   constructor(input, options, callbacks, state) {
     this.input = state ? input : input.charCodeAt(0) === 65279 ? input.slice(1) : input;
     this.length = this.input.length;
-    this.factory = options.factory ?? DataFactory;
+    this.factory = options.factory ?? defaultFactory;
     this.prefixes = state?.prefixes ?? /* @__PURE__ */ Object.create(null);
     this.baseIRI = state?.baseIRI ?? options.baseIRI ?? options.baseIRIPath ?? "";
     this.callbacks = callbacks;
@@ -561,9 +422,9 @@ var CoreParser = class {
     }
     return node;
   }
-  parseStatement(defaultGraph2, allowGraphCloseTerminator = false, insideGraphBlock = false) {
+  parseStatement(defaultGraph, allowGraphCloseTerminator = false, insideGraphBlock = false) {
     this.skipWsAndComments();
-    if (this.parseDirective(defaultGraph2)) {
+    if (this.parseDirective(defaultGraph)) {
       if (insideGraphBlock) {
         this.fail("Directives are not allowed inside graph blocks");
       }
@@ -572,7 +433,7 @@ var CoreParser = class {
     if (this.peekCharCode() === 123) {
       this.assertGraphBlockAllowed(insideGraphBlock);
       this.index++;
-      this.parseGraphStatements(defaultGraph2);
+      this.parseGraphStatements(defaultGraph);
       return false;
     }
     if (this.allowGraphs && this.matchWord("GRAPH")) {
@@ -580,14 +441,14 @@ var CoreParser = class {
         this.fail("Graph blocks are not allowed inside graph blocks");
       }
       this.skipWsAndComments();
-      const graph = this.parseGraphLabel(defaultGraph2);
+      const graph = this.parseGraphLabel(defaultGraph);
       this.skipWsAndComments();
       this.expectChar(123, "Expected { after GRAPH label");
       this.parseGraphStatements(graph);
       return false;
     }
     const termStart = this.index;
-    const subjectOrGraph = this.parseSubject(defaultGraph2);
+    const subjectOrGraph = this.parseSubject(defaultGraph);
     const termEnd = this.index;
     this.skipWsAndComments();
     if (this.peekCharCode() === 123) {
@@ -606,7 +467,7 @@ var CoreParser = class {
         return true;
       }
     }
-    return this.parsePredicateObjectList(subjectOrGraph, defaultGraph2, 46, allowGraphCloseTerminator);
+    return this.parsePredicateObjectList(subjectOrGraph, defaultGraph, 46, allowGraphCloseTerminator);
   }
   assertGraphBlockAllowed(insideGraphBlock) {
     if (insideGraphBlock) {
@@ -729,10 +590,10 @@ var CoreParser = class {
     }
   }
   addQuad(subject, predicate, object, graph) {
-    const quad2 = this.factory.quad(subject, predicate, object, graph);
-    this.quads.push(quad2);
+    const quad = this.factory.quad(subject, predicate, object, graph);
+    this.quads.push(quad);
     if (this.messagesEnabled) {
-      this.messageQuads.push({ quad: quad2, messageCounter: this.messageCounter });
+      this.messageQuads.push({ quad, messageCounter: this.messageCounter });
       this.messageCountHint = Math.max(this.messageCountHint, this.messageCounter + 1);
       this.afterMessageDelimiter = false;
     }
@@ -1581,18 +1442,12 @@ function getMessageCount(output) {
   const value = output.messageCount;
   return typeof value === "number" ? value : void 0;
 }
-var namedNode = DataFactory.namedNode;
-var blankNode = DataFactory.blankNode;
-var literal = DataFactory.literal;
-var variable = DataFactory.variable;
-var defaultGraph = DataFactory.defaultGraph;
-var quad = DataFactory.quad;
 
 // src/serialize.ts
-var XSD_STRING2 = "http://www.w3.org/2001/XMLSchema#string";
-function quadToString(quad2) {
-  const graph = quad2.graph.termType === "DefaultGraph" ? "" : ` ${termToString(quad2.graph)}`;
-  return `${termToString(quad2.subject)} ${termToString(quad2.predicate)} ${termToString(quad2.object)}${graph} .`;
+var XSD_STRING = "http://www.w3.org/2001/XMLSchema#string";
+function quadToString(quad) {
+  const graph = quad.graph.termType === "DefaultGraph" ? "" : ` ${termToString(quad.graph)}`;
+  return `${termToString(quad.subject)} ${termToString(quad.predicate)} ${termToString(quad.object)}${graph} .`;
 }
 function termToString(term) {
   switch (term.termType) {
@@ -1609,7 +1464,7 @@ function termToString(term) {
       if (term.language) {
         return `${quoted}@${term.direction ? `${term.language}--${term.direction}` : term.language}`;
       }
-      if (term.datatype.value === XSD_STRING2) {
+      if (term.datatype.value === XSD_STRING) {
         return quoted;
       }
       return `${quoted}^^<${term.datatype.value}>`;
@@ -1695,8 +1550,8 @@ try {
   let i = 0;
   for (const item of quads) {
     if (!silent) {
-      const quad2 = isMessageQuad(item) ? item.quad : item;
-      process.stdout.write(`${quadToString(quad2)}
+      const quad = isMessageQuad(item) ? item.quad : item;
+      process.stdout.write(`${quadToString(quad)}
 `);
     }
     i++;

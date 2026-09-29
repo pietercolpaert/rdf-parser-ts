@@ -1,7 +1,8 @@
 import { Readable } from 'node:stream';
 import type * as RDF from '@rdfjs/types';
+import { DataFactory } from 'rdf-data-factory';
 import { describe, expect, it } from 'vitest';
-import { DataFactory, IncrementalParser, StreamParser, isMessageQuad, type ParserOutputItem } from '../src';
+import { IncrementalParser, StreamParser, isMessageQuad, type ParserOutputItem } from '../src';
 import { StreamParser as BrowserStreamParser } from '../src/browser';
 import { quadToString } from '../src/serialize';
 
@@ -126,10 +127,9 @@ describe('Node.js StreamParser', () => {
   });
 
   it('wraps non-Error exceptions', async() => {
-    const factory = {
-      ...DataFactory,
+    const factory = Object.assign(new DataFactory(), {
       namedNode: (): never => throwValue('factory failure'),
-    };
+    });
     const parser = new StreamParser({ factory });
     const done = collectNode(parser);
     parser.end('<http://s> <http://p> <http://o> .');

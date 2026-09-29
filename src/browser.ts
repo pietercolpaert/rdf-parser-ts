@@ -3,24 +3,11 @@ import { IncrementalParser, isMessageQuad } from './index';
 import type { ParserOptions, ParserOutputItem } from './index';
 
 export {
-  BlankNode,
-  DataFactory,
-  DefaultGraph,
   IncrementalParser,
-  Literal,
   Message,
-  NamedNode,
   Parser,
-  Quad,
-  Variable,
-  blankNode,
-  defaultGraph,
   isMessageQuad,
-  literal,
-  namedNode,
-  quad,
   toMessages,
-  variable,
 } from './index';
 
 export type {

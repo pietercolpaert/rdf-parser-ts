@@ -1,7 +1,8 @@
 import { Readable, Writable } from 'node:stream';
 import type * as RDF from '@rdfjs/types';
+import { DataFactory } from 'rdf-data-factory';
 import { describe, expect, it } from 'vitest';
-import { DataFactory, Parser, StreamParser, isMessageQuad, type MessageQuad } from '../src';
+import { Parser, StreamParser, isMessageQuad, type MessageQuad } from '../src';
 import { StreamParser as BrowserStreamParser } from '../src/browser';
 import { quadToString, termToString } from '../src/serialize';
 
@@ -166,7 +167,7 @@ _:b9751
   });
 
   it('supports an RDF-JS factory override', () => {
-    const quads = <RDF.BaseQuad[]>(new Parser({ factory: DataFactory }).parse('<s> <p> "o" .') ?? []);
+    const quads = <RDF.BaseQuad[]>(new Parser({ factory: new DataFactory() }).parse('<s> <p> "o" .') ?? []);
     expect(quads[0]?.subject.termType).toBe('NamedNode');
     expect(quads[0]?.object.termType).toBe('Literal');
     expect(quads[0]?.graph.termType).toBe('DefaultGraph');

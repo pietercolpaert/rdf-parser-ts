@@ -1,4 +1,5 @@
 import type * as RDF from '@rdfjs/types';
+import { DataFactory } from 'rdf-data-factory';
 import { Transform, type TransformOptions, type Readable } from 'readable-stream';
 
 export interface ParserOptions {
@@ -11,7 +12,7 @@ export interface ParserOptions {
    * N-Triples and N-Quads enable strict line-based validation; without a hint, Turtle/TriG syntax is accepted.
    */
   format?: string;
-  /** RDF/JS data factory used to create terms and quads. Defaults to {@link DataFactory}. */
+  /** RDF/JS data factory used to create terms and quads. Defaults to the `DataFactory` of rdf-data-factory. */
   factory?: RDF.DataFactory<RDF.BaseQuad>;
   /** Emit comment events in streaming mode. */
   comments?: boolean;
@@ -88,98 +89,15 @@ const RDF_REST = `${RDF_NS}rest`;
 const RDF_NIL = `${RDF_NS}nil`;
 const RDF_LANG_STRING = `${RDF_NS}langString`;
 const RDF_DIR_LANG_STRING = `${RDF_NS}dirLangString`;
-const XSD_STRING = `${XSD}string`;
 const XSD_INTEGER = `${XSD}integer`;
 const XSD_DECIMAL = `${XSD}decimal`;
 const XSD_DOUBLE = `${XSD}double`;
 const XSD_BOOLEAN = `${XSD}boolean`;
 type LiteralDirection = RDF.DirectionalLanguage['direction'];
 
-function sameTerm(a: RDF.Term, b: RDF.Term | null | undefined): boolean {
-  if (!b || a.termType !== b.termType || a.value !== b.value) {
-    return false;
-  }
-  if (a.termType === 'Literal' && b.termType === 'Literal') {
-    return a.language === b.language && a.direction === b.direction && a.datatype.equals(b.datatype);
-  }
-  if (a.termType === 'Quad' && b.termType === 'Quad') {
-    return a.subject.equals(b.subject) && a.predicate.equals(b.predicate) &&
-      a.object.equals(b.object) && a.graph.equals(b.graph);
-  }
-  return true;
-}
-
-export class NamedNode<Iri extends string = string> implements RDF.NamedNode<Iri> {
-  public readonly termType = <const>'NamedNode';
-  public constructor(public readonly value: Iri) {}
-  public equals(other?: RDF.Term | null): boolean {
-    return sameTerm(this, other);
-  }
-}
-
-export class BlankNode implements RDF.BlankNode {
-  public readonly termType = <const>'BlankNode';
-  public constructor(public readonly value: string) {}
-  public equals(other?: RDF.Term | null): boolean {
-    return sameTerm(this, other);
-  }
-}
-
-export class Variable implements RDF.Variable {
-  public readonly termType = <const>'Variable';
-  public constructor(public readonly value: string) {}
-  public equals(other?: RDF.Term | null): boolean {
-    return sameTerm(this, other);
-  }
-}
-
-export class DefaultGraph implements RDF.DefaultGraph {
-  public readonly termType = <const>'DefaultGraph';
-  public readonly value = <const>'';
-  public equals(other?: RDF.Term | null): boolean {
-    return sameTerm(this, other);
-  }
-}
-
-export class Literal implements RDF.Literal {
-  public readonly termType = <const>'Literal';
-  public readonly direction?: LiteralDirection;
-
-  public constructor(
-    public readonly value: string,
-    public readonly language = '',
-    public readonly datatype: RDF.NamedNode = new NamedNode(language ? RDF_LANG_STRING : XSD_STRING),
-    direction?: LiteralDirection,
-  ) {
-    if (direction) {
-      this.direction = direction;
-    }
-  }
-
-  public equals(other?: RDF.Term | null): boolean {
-    return sameTerm(this, other);
-  }
-}
-
-export class Quad implements RDF.BaseQuad {
-  public readonly termType = <const>'Quad';
-  public readonly value = <const>'';
-
-  public constructor(
-    public readonly subject: RDF.Term,
-    public readonly predicate: RDF.Term,
-    public readonly object: RDF.Term,
-    public readonly graph: RDF.Term = defaultGraphSingleton,
-  ) {}
-
-  public equals(other?: RDF.Term | null): boolean {
-    return sameTerm(this, other);
-  }
-}
-
 /**
  * The quads of a single RDF Message. RDF/JS has no notion of messages, so this is the one
- * data model class that goes beyond the RDF/JS interfaces.
+ * data model class this package adds to the RDF/JS interfaces.
  */
 export class Message extends Array<RDF.BaseQuad> {
   public static override get [Symbol.species](): ArrayConstructor {
@@ -195,75 +113,8 @@ export class Message extends Array<RDF.BaseQuad> {
   }
 }
 
-const defaultGraphSingleton = new DefaultGraph();
-
-let globalBlankNodeCounter = 0;
-
-function isDirectionalLanguage(value: unknown): value is RDF.DirectionalLanguage {
-  return Boolean(value && typeof value === 'object' && 'language' in value && !('termType' in value));
-}
-
-function fromTerm(original: RDF.NamedNode): NamedNode;
-function fromTerm(original: RDF.BlankNode): BlankNode;
-function fromTerm(original: RDF.Literal): Literal;
-function fromTerm(original: RDF.Variable): Variable;
-function fromTerm(original: RDF.DefaultGraph): DefaultGraph;
-function fromTerm(original: RDF.BaseQuad): Quad;
-function fromTerm(original: RDF.Term): RDF.Term;
-function fromTerm(original: RDF.Term): RDF.Term {
-  switch (original.termType) {
-    case 'NamedNode':
-      return new NamedNode(original.value);
-    case 'BlankNode':
-      return new BlankNode(original.value);
-    case 'Variable':
-      return new Variable(original.value);
-    case 'DefaultGraph':
-      return defaultGraphSingleton;
-    case 'Literal':
-      return new Literal(
-        original.value,
-        original.language,
-        fromTerm(original.datatype),
-        original.direction ?? undefined,
-      );
-    case 'Quad':
-      return new Quad(
-        fromTerm(original.subject),
-        fromTerm(original.predicate),
-        fromTerm(original.object),
-        fromTerm(original.graph),
-      );
-  }
-}
-
-/** The default RDF/JS data factory. */
-export const DataFactory = {
-  namedNode: <Iri extends string = string>(value: Iri): NamedNode<Iri> => new NamedNode(value),
-  blankNode: (value?: string): BlankNode => new BlankNode(value ?? `b${globalBlankNodeCounter++}`),
-  literal: (value: string, languageOrDatatype?: string | RDF.NamedNode | RDF.DirectionalLanguage): Literal => {
-    if (typeof languageOrDatatype === 'string') {
-      const language = languageOrDatatype.toLowerCase();
-      return new Literal(value, language, new NamedNode(language ? RDF_LANG_STRING : XSD_STRING));
-    }
-    if (isDirectionalLanguage(languageOrDatatype)) {
-      const direction = languageOrDatatype.direction ?? undefined;
-      return new Literal(
-        value,
-        languageOrDatatype.language.toLowerCase(),
-        new NamedNode(direction ? RDF_DIR_LANG_STRING : RDF_LANG_STRING),
-        direction,
-      );
-    }
-    return new Literal(value, '', languageOrDatatype ?? new NamedNode(XSD_STRING));
-  },
-  variable: (value: string): Variable => new Variable(value),
-  defaultGraph: (): DefaultGraph => defaultGraphSingleton,
-  quad: (subject: RDF.Term, predicate: RDF.Term, object: RDF.Term, graph: RDF.Term = defaultGraphSingleton): Quad =>
-    new Quad(subject, predicate, object, graph),
-  fromTerm,
-  fromQuad: (original: RDF.BaseQuad): Quad => fromTerm(original),
-} satisfies RDF.DataFactory<RDF.BaseQuad>;
+/** Used when no factory is passed; it only ever receives explicit blank node labels. */
+const defaultFactory: RDF.DataFactory<RDF.BaseQuad> = new DataFactory<RDF.BaseQuad>();
 
 /**
  * Parses a complete Turtle, TriG, N-Triples or N-Quads document held in memory.
@@ -644,7 +495,7 @@ class CoreParser {
   public constructor(input: string, options: ParserOptions, callbacks: ParserEventCallbacks, state?: CoreParserState) {
     this.input = state ? input : (input.charCodeAt(0) === 0xFEFF ? input.slice(1) : input);
     this.length = this.input.length;
-    this.factory = options.factory ?? DataFactory;
+    this.factory = options.factory ?? defaultFactory;
     this.prefixes = state?.prefixes ?? <Record<string, RDF.NamedNode>>Object.create(null);
     this.baseIRI = state?.baseIRI ?? options.baseIRI ?? options.baseIRIPath ?? '';
     this.callbacks = callbacks;
@@ -2112,10 +1963,3 @@ function getMessageCount(output: Iterable<ParserOutputItem>): number | undefined
   const value = (<Partial<MessageQuadArray>>output).messageCount;
   return typeof value === 'number' ? value : undefined;
 }
-
-export const namedNode = DataFactory.namedNode;
-export const blankNode = DataFactory.blankNode;
-export const literal = DataFactory.literal;
-export const variable = DataFactory.variable;
-export const defaultGraph = DataFactory.defaultGraph;
-export const quad = DataFactory.quad;
