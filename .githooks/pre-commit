@@ -3,6 +3,3 @@ set -eu
 
 echo "Running spec tests and building distribution files before commit..."
 npm run spec
-
-echo "Adding generated dist files to the commit..."
-git add -f dist
