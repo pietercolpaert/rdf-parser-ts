@@ -86,8 +86,8 @@
     "spec-1-2-earl-turtle": "rdf-test-suite spec/parser.cjs https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-turtle/syntax/manifest.ttl -i '{ \"format\": \"turtle\" }' -c .rdf-test-suite-cache/ -o earl -p spec/earl-meta.json > spec/earl-turtle.ttl",
     "spec-1-2-earl-trig": "rdf-test-suite spec/parser.cjs https://w3c.github.io/rdf-tests/rdf/rdf12/rdf-trig/syntax/manifest.ttl -i '{ \"format\": \"trig\" }' -c .rdf-test-suite-cache/ -o earl -p spec/earl-meta.json > spec/earl-trig.ttl",
     "spec-clean": "rm -rf .rdf-test-suite-cache/",
-    "perf": "npm run build && node perf/bench.js",
-    "perf:quick": "npm run build && node perf/bench.js --sizes 1000,10000",
+    "perf": "npm run build && node --expose-gc perf/compare.js",
+    "perf:quick": "npm run build && node --expose-gc perf/compare.js --sizes 1000,10000 --samples 3",
     "perf:regression": "npm run build && node --expose-gc perf/regression.js",
     "perf:graphy": "npm run build && node perf/bench.js --no-triple-terms",
     "typecheck": "tsc --noEmit",
@@ -97,6 +97,7 @@
   },
   "dependencies": {
     "@rdfjs/types": "^2.0.1",
+    "n3.js-messages": "^0.1.1",
     "rdf-data-factory": "^2.1.0",
     "readable-stream": "^4.7.0"
   },
@@ -109,7 +110,7 @@
     "arrayify-stream": "^3.0.0",
     "esbuild": "^0.28.2",
     "eslint": "^8.57.1",
-    "n3": "^2.7.12",
+    "n3": "^2.13.11",
     "rdf-isomorphic": "^2.0.1",
     "rdf-test-suite": "^2.9.0",
     "streamify-string": "^1.0.1",
